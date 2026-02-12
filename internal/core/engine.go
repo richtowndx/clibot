@@ -1261,6 +1261,16 @@ func (e *Engine) SendToAllBots(message string) {
 func (e *Engine) startWatchdog(session *Session, userPrompt string, beforeCapture string) error {
 	adapter := e.cliAdapters[session.CLIType]
 
+	// Check if session needs watchdog monitoring
+	// ACP adapter handles responses asynchronously via SessionUpdate callbacks
+	if !session.NeedsWatchdog() {
+		logger.WithFields(logrus.Fields{
+			"session":  session.Name,
+		}).Debug("skipping-watchdog-for-async-adapter")
+		return nil
+	}
+
+
 	// Check which mode to use
 	if adapter.UseHook() {
 		logger.WithField("session", session.Name).Debug("using-hook-mode")
@@ -1274,6 +1284,15 @@ func (e *Engine) startWatchdog(session *Session, userPrompt string, beforeCaptur
 // startWatchdogWithContext starts monitoring with a cancellable context
 // This prevents goroutine leaks when multiple messages are sent rapidly
 func (e *Engine) startWatchdogWithContext(ctx context.Context, session *Session, userPrompt string, beforeCapture string) error {
+	// Check if session needs watchdog monitoring
+	if !session.NeedsWatchdog() {
+		logger.WithFields(logrus.Fields{
+			"session":  session.Name,
+			"cliType":  session.CLIType,
+		}).Debug("skipping-watchdog-for-async-adapter")
+		return nil
+	}
+
 	adapter := e.cliAdapters[session.CLIType]
 
 	// Check which mode to use

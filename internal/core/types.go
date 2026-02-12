@@ -27,6 +27,15 @@ type Session struct {
 	cancelCtx context.CancelFunc // Cancel function for active watchdog goroutine
 }
 
+// NeedsWatchdog returns true if session requires watchdog monitoring
+// ACP sessions handle responses asynchronously via SessionUpdate callbacks,
+// so they don't need watchdog (tmux polling or hook waiting)
+func (s *Session) NeedsWatchdog() bool {
+	// ACP adapter sends responses directly via SendResponseToSession
+	// No need for tmux polling or hook watchdog
+	return s.CLIType != "acp"
+}
+
 // ResponseEvent represents a CLI response event
 type ResponseEvent struct {
 	SessionName string
