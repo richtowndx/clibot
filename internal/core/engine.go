@@ -424,7 +424,8 @@ func (e *Engine) HandleUserMessage(msg bot.BotMessage) {
 	// Step 3.5: Capture before snapshot for incremental extraction (polling mode only)
 	adapter := e.cliAdapters[session.CLIType]
 	var beforeCapture string
-	if e.inputTracker != nil && !adapter.UseHook() && session.NeedsWatchdog() {		var err error
+	if e.inputTracker != nil && !adapter.UseHook() && session.NeedsWatchdog() {
+		var err error
 		beforeCapture, err = watchdog.CapturePane(session.Name, capturePaneLine)
 		if err != nil {
 			logger.WithFields(logrus.Fields{
@@ -1264,11 +1265,10 @@ func (e *Engine) startWatchdog(session *Session, userPrompt string, beforeCaptur
 	// ACP adapter handles responses asynchronously via SessionUpdate callbacks
 	if !session.NeedsWatchdog() {
 		logger.WithFields(logrus.Fields{
-			"session":  session.Name,
+			"session": session.Name,
 		}).Debug("skipping-watchdog-for-async-adapter")
 		return nil
 	}
-
 
 	// Check which mode to use
 	if adapter.UseHook() {
@@ -1286,8 +1286,8 @@ func (e *Engine) startWatchdogWithContext(ctx context.Context, session *Session,
 	// Check if session needs watchdog monitoring
 	if !session.NeedsWatchdog() {
 		logger.WithFields(logrus.Fields{
-			"session":  session.Name,
-			"cliType":  session.CLIType,
+			"session": session.Name,
+			"cliType": session.CLIType,
 		}).Debug("skipping-watchdog-for-async-adapter")
 		return nil
 	}

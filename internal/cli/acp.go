@@ -53,17 +53,17 @@ type ACPAdapter struct {
 	cmd           *exec.Cmd
 	mu            sync.Mutex
 	sessions      map[string]*acpSession
-	isRemote      bool // Tracks if connection is remote (tcp/unix) vs local (stdio)
-	currentEngine Engine // Engine reference for sending responses
+	isRemote      bool       // Tracks if connection is remote (tcp/unix) vs local (stdio)
+	currentEngine Engine     // Engine reference for sending responses
 	currentClient *acpClient // Reference to current client for response buffer access
 }
 
 type acpSession struct {
-	ctx        context.Context
-	cancel     context.CancelFunc
-	active     bool
-	connReady  chan struct{} // Closed when connection is ready for this session
-	sessionId  string         // ACP session ID from server
+	ctx       context.Context
+	cancel    context.CancelFunc
+	active    bool
+	connReady chan struct{} // Closed when connection is ready for this session
+	sessionId string        // ACP session ID from server
 }
 
 // acpClient implements acp.Client interface for ACP callbacks
@@ -178,7 +178,7 @@ func (a *ACPAdapter) CreateSession(sessionName, workDir, startCmd, transportURL 
 	a.sessions[sessionName] = &acpSession{
 		ctx:       ctx,
 		cancel:    cancel,
-		active:     true,
+		active:    true,
 		connReady: connReady,
 	}
 
@@ -412,7 +412,7 @@ func (a *ACPAdapter) startStdioServer(sessionName, workDir, command string, clie
 						logger.WithFields(logrus.Fields{
 							"session":   sessionName,
 							"sessionId": sess.sessionId,
-							"attempt":    attempt,
+							"attempt":   attempt,
 						}).Info("acp-session-id-saved")
 					}
 					a.mu.Unlock()
@@ -451,8 +451,8 @@ func (a *ACPAdapter) startStdioServer(sessionName, workDir, command string, clie
 	}()
 
 	logger.WithFields(logrus.Fields{
-		"pid":      cmd.Process.Pid,
-		"session":   sessionName,
+		"pid":     cmd.Process.Pid,
+		"session": sessionName,
 	}).Info("acp-stdio-server-started")
 
 	return nil
@@ -518,7 +518,7 @@ func (a *ACPAdapter) connectRemoteServer(sessionName string, workDir string, tra
 						logger.WithFields(logrus.Fields{
 							"session":   sessionName,
 							"sessionId": sess.sessionId,
-							"attempt":    attempt,
+							"attempt":   attempt,
 						}).Info("acp-session-id-saved")
 					}
 					a.mu.Unlock()
@@ -545,7 +545,7 @@ func (a *ACPAdapter) connectRemoteServer(sessionName string, workDir string, tra
 	logger.WithFields(logrus.Fields{
 		"network": network,
 		"address": address,
-		"session":  sessionName,
+		"session": sessionName,
 	}).Info("acp-remote-connected")
 
 	return nil
@@ -579,9 +579,9 @@ func (c *acpClient) RequestPermission(ctx context.Context, params acp.RequestPer
 func (c *acpClient) SessionUpdate(ctx context.Context, params acp.SessionNotification) error {
 	// Log session update (contains AI responses)
 	logger.WithFields(logrus.Fields{
-		"session_id": params.SessionId,
+		"session_id":   params.SessionId,
 		"session_name": c.sessionName,
-		"update":     params.Update,
+		"update":       params.Update,
 	}).Debug("acp-session-update")
 
 	// Save sessionId if this is the first update

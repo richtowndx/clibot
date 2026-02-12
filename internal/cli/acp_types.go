@@ -20,9 +20,9 @@ const (
 	acpConnectionReadyTimeout = 30 * time.Second
 
 	// NewSession configuration
-	acpNewSessionTimeout     = 10 * time.Second // per attempt
-	acpNewSessionMaxRetries  = 3                // maximum attempts
-	acpNewSessionRetryDelay  = 2 * time.Second // between attempts
+	acpNewSessionTimeout    = 10 * time.Second // per attempt
+	acpNewSessionMaxRetries = 3                // maximum attempts
+	acpNewSessionRetryDelay = 2 * time.Second  // between attempts
 
 	// Connection stabilize delay after establishing connection (500ms)
 	acpConnectionStabilizeDelay = 500 * time.Millisecond
