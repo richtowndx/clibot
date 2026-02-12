@@ -410,6 +410,36 @@ claude_efficient:
   stable_count: 4
 ```
 
+### ACP Mode (Agent Client Protocol)
+
+**Configuration:**
+```yaml
+sessions:
+  - name: "demo_acp"
+    cli_type: "acp"
+    work_dir: "/path/to/workspace"
+    start_cmd: "gemini --experimental-acp"
+    transport: "stdio://"  # or "tcp://host:port" or "unix:///path/to/socket"
+```
+
+**How it works:**
+1. ACP server starts as subprocess (stdio) or remote connection (TCP/Unix socket)
+2. Client-side connection established with Agent Client Protocol
+3. Server calls NewSession to create session
+4. Client sends Prompt requests with sessionId
+5. Server streams responses via SessionUpdate callbacks
+6. Responses sent directly to user via SendResponseToSession
+
+**Pros:**
+- ✅ No tmux required
+- ✅ Streaming responses (real-time)
+- ✅ Full duplex communication
+- ✅ Works with any ACP-compatible AI CLI
+
+**Cons:**
+- ⚠️ Requires ACP-compatible CLI (e.g., gemini --experimental-acp)
+- ⚠️ Connection establishment may take time (up to 30s with retries)
+
 ## Project Structure
 
 ```
