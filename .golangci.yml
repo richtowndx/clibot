@@ -103,8 +103,7 @@ issues:
   exclude-use-default: false
 
 output:
-  # Formats: colored-line-number|line-number|json|tab|checkstyle|code-climate
-  formats:
-    - format: colored-line-number
+  # Format: colored-line-number|line-number|json|tab|checkstyle|code-climate
+  format: colored-line-number
   # Sort results by: filepath, line and column
   sort-results: true
