@@ -314,22 +314,39 @@ func (e *Engine) HandleUserMessage(msg bot.BotMessage) {
 		"channel":  msg.Channel,
 	}).Info("processing-user-message")
 
-	// Step 0: Security check - verify user is in whitelist
+	// Step 0: Check if it's a special command (no prefix required)
+	// Only "help" and "echo" bypass whitelist to allow users to get their user_id
+	input := strings.TrimSpace(msg.Content)
+	cmd, isSpecialCmd, args := isSpecialCommand(input)
+	
+	if isSpecialCmd {
+		// Only "help" and "echo" bypass whitelist check
+		if cmd == "help" || cmd == "echo" {
+			logger.WithFields(logrus.Fields{
+				"command": cmd,
+				"args":    args,
+				"user":    msg.UserID,
+			}).Info("special-command-received")
+			e.HandleSpecialCommandWithArgs(cmd, args, msg)
+			return
+		}
+	}
+
+	// Step 1: Security check - verify user is in whitelist
+	// Applies to all commands except "help" and "echo", and all AI queries
 	if !e.config.IsUserAuthorized(msg.Platform, msg.UserID) {
 		logger.WithFields(logrus.Fields{
 			"platform": msg.Platform,
 			"user":     msg.UserID,
 		}).Warn("unauthorized-access-attempt")
-		e.SendToBot(msg.Platform, msg.Channel, "❌ Unauthorized: Please contact the administrator to add your user ID")
+		e.SendToBot(msg.Platform, msg.Channel, "❌ Unauthorized: Please contact administrator to add your user ID")
 		return
 	}
 
 	logger.WithField("user", msg.UserID).Debug("user-authorized")
 
-	// Step 1: Check if it's a special command (no prefix required)
-	// Commands are matched exactly for optimal performance
-	input := strings.TrimSpace(msg.Content)
-	if cmd, isCmd, args := isSpecialCommand(input); isCmd {
+	// Step 2: Handle remaining special commands (status, slist, etc.)
+	if isSpecialCmd {
 		logger.WithFields(logrus.Fields{
 			"command": cmd,
 			"args":    args,
@@ -339,7 +356,10 @@ func (e *Engine) HandleUserMessage(msg bot.BotMessage) {
 		return
 	}
 
-	// Step 2: Get the active session for this user
+	// Step 3: Get active session for this user
+
+
+
 	userKey := getUserKey(msg.Platform, msg.UserID)
 
 	e.sessionMu.Lock()
