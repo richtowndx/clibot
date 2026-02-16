@@ -305,75 +305,72 @@ func (a *PTYAdapter) readPTYOutput(sessionName string, sess *ptySession) {
 	ticker := time.NewTicker(flushDelay)
 	defer ticker.Stop()
 
-	for {
-		select {
-		case <-ticker.C:
-			a.mu.Lock()
-			engine := a.engine
-			_, sessionExists := a.sessions[sessionName]
-			a.mu.Unlock()
+	for range ticker.C {
+		a.mu.Lock()
+		engine := a.engine
+		_, sessionExists := a.sessions[sessionName]
+		a.mu.Unlock()
 
-			if !sessionExists {
-				return
+		if !sessionExists {
+			return
+		}
+
+		// Read from PTY (non-blocking check)
+		n, err := sess.ptmx.Read(buf)
+		if n > 0 {
+			buffer.Write(buf[:n])
+			currentContent := buffer.String()
+
+			// Log first read for debugging
+			if lastContent == "" {
+				logger.WithFields(logrus.Fields{
+					"session":    sessionName,
+					"read_bytes": n,
+				}).Debug("pty-first-read")
 			}
 
-			// Read from PTY (non-blocking check)
-			n, err := sess.ptmx.Read(buf)
-			if n > 0 {
-				buffer.Write(buf[:n])
-				currentContent := buffer.String()
+			// Flush conditions (satisfy any):
+			// 1. Contains newline → preserve some real-time feel
+			// 2. Buffer full → prevent memory issues
+			// 3. Timeout reached → prevent excessive lag
+			shouldFlush := strings.Contains(currentContent, "\n") ||
+				len(currentContent) >= maxBufferSize ||
+				(time.Since(lastFlush) >= flushDelay && currentContent != lastContent)
 
-				// Log first read for debugging
-				if lastContent == "" {
-					logger.WithFields(logrus.Fields{
-						"session":    sessionName,
-						"read_bytes": n,
-					}).Debug("pty-first-read")
-				}
+			if shouldFlush && engine != nil {
+				engine.SendResponseToSession(sessionName, currentContent)
+				logger.WithFields(logrus.Fields{
+					"session":         sessionName,
+					"response_length": len(currentContent),
+					"reason":          getFlushReason(strings.Contains(currentContent, "\n"), len(currentContent) >= maxBufferSize, time.Since(lastFlush) >= flushDelay),
+				}).Debug("pty-flush-buffer")
+				buffer.Reset()
+				lastFlush = time.Now()
+			}
 
-				// Flush conditions (satisfy any):
-				// 1. Contains newline → preserve some real-time feel
-				// 2. Buffer full → prevent memory issues
-				// 3. Timeout reached → prevent excessive lag
-				shouldFlush := strings.Contains(currentContent, "\n") ||
-					len(currentContent) >= maxBufferSize ||
-					(time.Since(lastFlush) >= flushDelay && currentContent != lastContent)
+			lastContent = currentContent
+		}
 
-				if shouldFlush && engine != nil {
-					engine.SendResponseToSession(sessionName, currentContent)
+		if err != nil {
+			// Send remaining content
+			if buffer.Len() > 0 {
+				finalContent := buffer.String()
+				if finalContent != "" && engine != nil {
+					engine.SendResponseToSession(sessionName, finalContent)
 					logger.WithFields(logrus.Fields{
 						"session":         sessionName,
-						"response_length": len(currentContent),
-						"reason":          getFlushReason(strings.Contains(currentContent, "\n"), len(currentContent) >= maxBufferSize, time.Since(lastFlush) >= flushDelay),
-					}).Debug("pty-flush-buffer")
-					buffer.Reset()
-					lastFlush = time.Now()
+						"final_response":  true,
+						"response_length": len(finalContent),
+					}).Debug("pty-final-response-sent")
 				}
-
-				lastContent = currentContent
 			}
 
-			if err != nil {
-				// Send remaining content
-				if buffer.Len() > 0 {
-					finalContent := buffer.String()
-					if finalContent != "" && engine != nil {
-						engine.SendResponseToSession(sessionName, finalContent)
-						logger.WithFields(logrus.Fields{
-							"session":         sessionName,
-							"final_response":  true,
-							"response_length": len(finalContent),
-						}).Debug("pty-final-response-sent")
-					}
-				}
+			// Terminate session
+			a.mu.Lock()
+			a.terminateSession(sessionName)
+			a.mu.Unlock()
 
-				// Terminate session
-				a.mu.Lock()
-				a.terminateSession(sessionName)
-				a.mu.Unlock()
-
-				return
-			}
+			return
 		}
 	}
 }
