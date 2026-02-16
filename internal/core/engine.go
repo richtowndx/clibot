@@ -318,7 +318,7 @@ func (e *Engine) HandleUserMessage(msg bot.BotMessage) {
 	// Only "help" and "echo" bypass whitelist to allow users to get their user_id
 	input := strings.TrimSpace(msg.Content)
 	cmd, isSpecialCmd, args := isSpecialCommand(input)
-	
+
 	if isSpecialCmd {
 		// Only "help" and "echo" bypass whitelist check
 		if cmd == "help" || cmd == "echo" {
@@ -357,8 +357,6 @@ func (e *Engine) HandleUserMessage(msg bot.BotMessage) {
 	}
 
 	// Step 3: Get active session for this user
-
-
 
 	userKey := getUserKey(msg.Platform, msg.UserID)
 
