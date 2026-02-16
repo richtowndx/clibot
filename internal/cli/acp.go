@@ -262,6 +262,12 @@ func (a *ACPAdapter) SendInput(sessionName, input string) error {
 	}
 
 	if a.conn == nil {
+		// Connection not established, mark session as inactive
+		a.mu.Lock()
+		if sess, exists := a.sessions[sessionName]; exists {
+			sess.active = false
+		}
+		a.mu.Unlock()
 		return fmt.Errorf("ACP connection not established")
 	}
 
@@ -283,9 +289,20 @@ func (a *ACPAdapter) SendInput(sessionName, input string) error {
 
 	// Start activity monitor goroutine
 	monitorDone := make(chan struct{})
+	monitorStopped := make(chan struct{})
 	if clientImpl != nil {
-		go a.monitorActivity(sessionName, ctx, cancel, clientImpl, monitorDone)
-		defer close(monitorDone)
+		go func() {
+			a.monitorActivity(sessionName, ctx, cancel, clientImpl, monitorDone)
+			close(monitorStopped)
+		}()
+		defer func() {
+			close(monitorDone) // Signal monitor to stop
+			select {
+			case <-monitorStopped: // Wait for monitor to exit
+			case <-time.After(5 * time.Second):
+				logger.WithField("session", sessionName).Warn("acp-monitor-goroutine-did-not-exit-in-time")
+			}
+		}()
 	}
 
 	// Send prompt using ACP Prompt method
@@ -297,7 +314,19 @@ func (a *ACPAdapter) SendInput(sessionName, input string) error {
 		},
 	})
 	if err != nil {
-		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		// If error is not a timeout, mark session as inactive to prevent further requests
+		if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
+			logger.WithFields(logrus.Fields{
+				"session": sessionName,
+				"error":   err,
+			}).Error("acp-connection-error-marking-session-inactive")
+
+			a.mu.Lock()
+			if sess, exists := a.sessions[sessionName]; exists {
+				sess.active = false
+			}
+			a.mu.Unlock()
+		} else if errors.Is(err, context.Canceled) {
 			return fmt.Errorf("request cancelled due to inactivity (idle timeout: %v)", a.config.IdleTimeout)
 		}
 		return fmt.Errorf("ACP prompt failed: %w", err)
@@ -726,11 +755,13 @@ func (c *acpClient) RequestPermission(ctx context.Context, params acp.RequestPer
 // SessionUpdate receives session updates from agent
 func (c *acpClient) SessionUpdate(ctx context.Context, params acp.SessionNotification) error {
 	// Send activity notification to monitor (non-blocking)
+	// Use select with timeout to prevent blocking if monitor is not running
 	select {
 	case c.activityChan <- time.Now():
-	default:
-		// Channel is full, monitor might be slow, but that's ok
-		// The notification will be sent next time
+		logger.WithField("session", c.sessionName).Trace("acp-activity-notification-sent")
+	case <-time.After(100 * time.Millisecond):
+		// Monitor might not be running or channel is blocked
+		logger.WithField("session", c.sessionName).Debug("acp-activity-notification-timeout-monitor-not-running")
 	}
 
 	// Log session update (contains AI responses)
