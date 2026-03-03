@@ -1,7 +1,7 @@
 # clibot
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Go Report Card](https://goreportcard.com/badge/github.com/keepmind9/clibot?v=20250209)](https://goreportcard.com/report/github.com/keepmind9/clibot)
+[![Go Report Card](https://goreportcard.com/badge/github.com/keepmind9/clibot?v=20260303)](https://goreportcard.com/report/github.com/keepmind9/clibot)
 [![GoDoc](https://pkg.go.dev/badge/github.com/keepmind9/clibot.svg)](https://pkg.go.dev/github.com/keepmind9/clibot)
 
 [English](./README.md) | 中文版
