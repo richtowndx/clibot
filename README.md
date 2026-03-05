@@ -6,521 +6,264 @@
 
 English | [中文版](./README_zh.md)
 
-clibot is a lightweight middleware that connects various IM platforms (Feishu, Discord, Telegram, etc.) with AI CLI tools (Claude Code, Gemini CLI, OpenCode, etc.), enabling users to remotely use AI programming assistants through chat interfaces.
+clibot is a lightweight middleware that connects various IM platforms (Feishu, Discord, Telegram, etc.) with AI CLI tools (Claude Code, Gemini CLI, OpenCode, etc.), enabling you to use powerful desktop AI programming assistants directly from your phone or tablet.
 
-## Features
+## ✨ Features
 
-- **No Public IP Required**: All bots connect via long-connections (WebSocket/Long Polling). You can deploy clibot on your home or office computer behind NAT without any port forwarding or public IP.
-- **Access Anywhere**: Use powerful desktop AI CLI tools from your mobile phone or tablet via IM
-- **Unified Entry Point**: Manage multiple AI CLI tools through a single IM bot with easy switching
-- **Flexible Extension**: Abstract interface design - add new CLI or Bot by simply implementing interfaces
-- **Transparent Proxy**: Most inputs are directly passed through to CLI, maintaining native user experience
-- **ACP Support**: Agent Client Protocol mode enables streaming responses, full-duplex communication, and works without tmux for compatible AI CLIs
+- **🌍 No Public IP Required**: All bots connect via long-connections (WebSocket/Long Polling). Deploy on your home/office computer behind NAT.
+- **📱 Access Anywhere**: Use desktop AI tools from mobile phone via IM apps
+- **🎯 Unified Entry Point**: Manage multiple AI tools through a single bot
+- **🔌 Flexible Extension**: Add new CLI or Bot by implementing interfaces
+- **⚡ ACP Support**: Streaming responses, no tmux required (for compatible CLIs)
 
-## Quick Start
+## 🚀 Quick Start
 
 ### Prerequisites
 
-### Operating System
+- **Go 1.24+**
+- [**Bot Account**](#setup-bot) (Feishu/Discord/Telegram)
+- [**ACP-Compatible CLI**](#acp-mode-recommended) (e.g., claude-agent-acp) OR **tmux** (for Hook Mode)
 
-**Supported Platforms**:
-- ✅ **Linux** - Fully supported (Ubuntu, Debian, Fedora, CentOS, Arch, etc.)
-- ✅ **macOS** - Fully supported
-- ⚠️ **Windows** - Only via WSL2 (Windows Subsystem for Linux)
+For detailed installation instructions, see [INSTALL.md](INSTALL.md).
 
-**Why not Windows native?**
-clibot depends on `tmux` for session management, which is not available natively on Windows.
-
-**Windows users**: Use WSL2 for the best experience:
-```bash
-# Install WSL2 on Windows 10/11
-wsl --install
-
-# After installation, setup WSL2 with Ubuntu
-wsl --set-default-version 2
-
-# Then follow Linux instructions in WSL terminal
-```
-
-See [Windows Setup Guide](#windows-setup) below for detailed instructions.
-
-### Required Software
-
-- **Go**: 1.24 or higher
-- **tmux**: Required for session management (clibot creates and manages tmux sessions)
-- **Git**: For cloning the repository (if installing from source)
-
-**Installing tmux**:
-```bash
-# Ubuntu/Debian
-sudo apt-get install tmux
-
-# macOS
-brew install tmux
-
-# Fedora/CentOS/RHEL
-sudo dnf install tmux
-
-# Arch Linux
-sudo pacman -S tmux
-```
-
-### Windows Setup (WSL2)
-
-clibot can run on Windows using WSL2 (Windows Subsystem for Linux).
-
-**Step 1: Install WSL2**
-
-Open PowerShell or Command Prompt as Administrator:
-
-```powershell
-# Enable WSL
-wsl --install
-
-# Restart your computer when prompted
-```
-
-**Step 2: Set WSL2 as default**
-
-```powershell
-wsl --set-default-version 2
-```
-
-**Step 3: Install Ubuntu (or other Linux distribution)**
-
-```powershell
-# View available distributions
-wsl --list --online
-
-# Install Ubuntu (recommended)
-wsl --install -d Ubuntu
-```
-
-**Step 4: Complete Ubuntu setup**
-
-1. Launch Ubuntu from Start menu
-2. Create a username and password
-3. Update packages:
-
-```bash
-# Inside WSL Ubuntu terminal
-sudo apt update && sudo apt upgrade -y
-```
-
-**Step 5: Install required tools in WSL**
-
-```bash
-# Install Go
-sudo apt install golang-go -y
-
-# Or install latest Go from website
-wget https://go.dev/dl/go1.24.0.linux-amd64.tar.gz
-sudo tar -C /usr/local -xzf go1.24.0.linux-amd64.tar.gz
-echo 'export PATH=$PATH:/usr/local/go/bin' >> ~/.bashrc
-source ~/.bashrc
-
-# Install tmux
-sudo apt install tmux -y
-
-# Install Git
-sudo apt install git -y
-```
-
-**Step 6: Install and run clibot**
-
-```bash
-# Inside WSL Ubuntu terminal
-go install github.com/keepmind9/clibot@latest
-
-# Configure
-mkdir -p ~/.config/clibot
-cp /mnt/c/path/to/clibot/configs/config.yaml ~/.config/clibot/config.yaml
-nano ~/.config/clibot/config.yaml
-
-# Run clibot
-clibot serve --config ~/.config/clibot/config.yaml
-```
-
-**Windows + WSL2 Tips**:
-
-- Access Windows files from WSL: `/mnt/c/Users/YourName/...`
-- Access WSL files from Windows: `\\wsl$\Ubuntu\home\yourname\...`
-- Run clibot as background service: Use systemd inside WSL
-- No firewall configuration needed (bots use long-connections, no inbound ports)
-- All communication is outbound to IM platforms (WebSocket/Long Polling)
-
-**Limitations**:
-- Clipboard integration may not work seamlessly
-- File path conversions needed (WSL ↔ Windows)
-- Performance slightly lower than native Linux
-
-### Installation
+### Install
 
 ```bash
 go install github.com/keepmind9/clibot@latest
 ```
 
-**Note**: The binary will be installed at `$GOPATH/bin/clibot` (usually `~/go/bin/clibot`).
-Make sure `~/go/bin` is in your PATH:
+The binary will be installed at `~/go/bin/clibot`. Make sure it's in your PATH:
+
 ```bash
 export PATH=$PATH:~/go/bin
 ```
 
-### Configuration
+## 🔑 Get Your User ID
 
-1. Copy the configuration template:
+Before configuring clibot, you need to get your user ID from the IM platform for whitelist and admin setup.
 
-```bash
-# Minimal: Essential config only (recommended for beginners)
-cp configs/config.mini.yaml ~/.config/clibot/config.yaml
+### Quick Method
 
-# Full: All options with detailed comments
-cp configs/config.full.yaml ~/.config/clibot/config.yaml
-```
-
-2. Edit the configuration file and fill in your bot credentials and whitelist users
-
-3. Choose your mode (see below):
-
-**Option A: ACP Mode (Recommended)**
-- No tmux required, streaming responses
-- Full feature support
-- Requires ACP-compatible CLI (e.g., claude-agent-acp)
+**Step 1:** Start clibot with whitelist temporarily disabled:
 
 ```yaml
+# ~/temp_config.yaml
+security:
+  whitelist_enabled: false  # Temporarily disable
+
+bots:
+  telegram:
+    enabled: true
+    token: "YOUR_BOT_TOKEN"
+```
+
+**Step 2:** Run clibot:
+
+```bash
+clibot serve --config ~/temp_config.yaml
+```
+
+**Step 3:** Send `whoami` command to your bot:
+
+```
+whoami
+```
+
+**Step 4:** Bot replies with your user ID:
+
+```
+Your Information:
+Platform: telegram
+User ID: 123456789
+```
+
+**Step 5:** Update your actual config with your user ID:
+
+```yaml
+security:
+  whitelist_enabled: true
+  allowed_users:
+    telegram:
+      - "123456789"  # Your actual user ID
+  admins:
+    telegram:
+      - "123456789"  # Your actual user ID
+```
+
+**Important:** Delete `~/temp_config.yaml` and restart with proper config.
+
+### Configure
+
+```bash
+# Create config directory
+mkdir -p ~/.config/clibot
+
+# Copy configuration template
+cp configs/config.mini.yaml ~/.config/clibot/config.yaml
+
+# Edit configuration (replace YOUR_* placeholders)
+nano ~/.config/clibot/config.yaml
+```
+
+### Run
+
+```bash
+clibot serve --config ~/.config/clibot/config.yaml
+```
+
+## 💡 Operation Modes
+
+### ACP Mode (Recommended) ⭐
+
+**Best for:** claude-agent-acp, Gemini CLI with ACP, OpenCode with ACP
+
+**Advantages:**
+- ✅ No tmux required
+- ✅ Streaming responses (real-time)
+- ✅ Full-duplex communication
+- ✅ Works on all platforms
+
+**Configuration:**
+```yaml
 sessions:
-  - name: "claude"
+  - name: "my-project"
     cli_type: "acp"
-    work_dir: "/path/to/workspace"
+    work_dir: "/path/to/project"
     start_cmd: "claude-agent-acp"
     transport: "stdio://"
 ```
 
-**Option B: Hook Mode**
-- Requires CLI hook configuration
-- Real-time notifications
-- See [CLI Hook Configuration Guide](./docs/en/setup/cli-hooks.md) for detailed setup.
-
-### Usage
-
+**Setup ACP CLI:**
 ```bash
-# Run clibot as a service
-clibot serve --config ~/.config/clibot/config.yaml
+# Install ACP adapter for Claude Code
+npm install -g @zed-industries/claude-agent-acp
 
-# Check status
-clibot status
+# Gemini CLI
+gemini --experimental-acp
+
+# OpenCode CLI
+opencode --acp
 ```
 
-## Commands
+### Hook Mode
 
-### serve
+**Best for:** Claude Code, Gemini CLI, OpenCode (default mode)
 
-Start the clibot service to handle IM messages and manage CLI sessions.
+**Advantages:**
+- ✅ Real-time notifications
+- ✅ Accurate completion detection
 
-```bash
-clibot serve [flags]
-```
-
-**Flags:**
-- `-c, --config <file>`: Configuration file path (default: `config.yaml` in current directory)
-- `--validate`: Validate configuration and exit
-
-**Examples:**
-```bash
-clibot serve
-clibot serve --config /etc/clibot/config.yaml
-clibot serve --config ~/.config/clibot/config.yaml
-```
-
-### validate
-
-Validate the clibot configuration file without starting the service.
-
-```bash
-clibot validate [flags]
-```
-
-**Flags:**
-- `-c, --config <file>`: Configuration file path (default: `config.yaml` in current directory)
-- `--show`: Show full configuration details
-- `--json`: Output in JSON format
-
-**Exit Codes:**
-- `0`: Configuration is valid
-- `1`: Configuration has errors
-
-**Examples:**
-```bash
-clibot validate
-clibot validate --config ~/my-config.yaml
-clibot validate --show
-clibot validate --json
-```
-
-### status
-
-Show clibot status and version information.
-
-```bash
-clibot status [flags]
-```
-
-**Flags:**
-- `-p, --port <number>`: Check if the service is running on the specified port
-- `--json`: Output in JSON format
-
-**Examples:**
-```bash
-clibot status
-clibot status --port 8080
-clibot status --json
-```
-
-**Output:**
-- Shows clibot version
-- Checks if service is running (when `--port` is specified)
-
-### version
-
-Show detailed version information.
-
-```bash
-clibot version [flags]
-```
-
-**Flags:**
-- `--json`: Output in JSON format
-
-**Examples:**
-```bash
-clibot version
-clibot version --json
-```
-
-**Output includes:**
-- Version number
-- Build time
-- Git branch
-- Git commit hash
-
-### hook
-
-Internal command called by CLI hooks to notify the main process of events. This is used by the hook mode configuration.
-
-```bash
-clibot hook --cli-type <type> [flags]
-```
-
-**Flags:**
-- `--cli-type <type>`: CLI type (claude/gemini/opencode/acp) **[required]**
-- `-p, --port <number>`: Hook server port (default: 8080)
-
-**Usage:**
-This command reads JSON event data from stdin and forwards it to the main process via HTTP.
-
-**Examples:**
-```bash
-echo '{"session":"my-session","event":"completed"}' | clibot hook --cli-type claude
-cat hook-data.json | clibot hook --cli-type gemini
-cat hook-data.json | clibot hook --cli-type claude --port 9000
-```
-
-**Note:** This command is typically called automatically by CLI tools configured with hooks, not manually by users.
-
-See [CLI Hook Configuration Guide](./docs/en/setup/cli-hooks.md) for detailed setup instructions.
-
-## Operation Modes
-
-clibot supports two modes for connecting AI CLI tools:
-
-### ACP Mode (Agent Client Protocol) - **Recommended**
-
-**Prerequisites:**
-
-ACP mode requires CLI tools that support the Agent Client Protocol.
-
-- **Claude Code CLI**: Requires third-party ACP adapter
-  ```bash
-  npm install -g @zed-industries/claude-agent-acp
-  ```
-
-- **Gemini CLI**: Use `--experimental-acp` flag to enable ACP mode
-- **OpenCode CLI**: Use `--acp` flag to enable ACP mode
-- **Other CLI**: Check official documentation for ACP-related parameters
+**Requirements:**
+- ⚠️ Requires tmux
+- ⚠️ Requires CLI hook configuration
 
 **Configuration:**
 ```yaml
 sessions:
-  - name: "claude"
-    cli_type: "acp"
-    work_dir: "/path/to/workspace"
-    start_cmd: "claude-agent-acp"  # or other ACP-compatible CLI
-    transport: "stdio://"
+  - name: "my-project"
+    cli_type: "claude"
+    work_dir: "/path/to/project"
+    start_cmd: "claude"
 ```
 
-**How it works:**
-1. ACP server starts as subprocess (stdio) or remote connection (TCP/Unix socket)
-2. Client-side connection established with Agent Client Protocol
-3. Server calls NewSession to create session
-4. Client sends Prompt requests with sessionId
-5. Server streams responses via SessionUpdate callbacks
-6. Responses sent directly to user via SendResponseToSession
+See [CLI Hook Configuration Guide](./docs/en/setup/cli-hooks.md) for detailed setup.
 
-**Pros:**
-- ✅ No tmux required
-- ✅ Streaming responses (real-time)
-- ✅ Full duplex communication
-- ✅ Full feature support
-
-**Cons:**
-- ⚠️ Requires ACP-compatible CLI (e.g., claude-agent-acp, gemini --experimental-acp)
-- ⚠️ Connection establishment may take time (up to 30s with retries)
-
-### Hook Mode (Default)
-
-**Configuration:**
-```yaml
-# Hook mode is the default for non-ACP adapters
-# No additional configuration needed
-# CLI just needs to be configured to send hooks to clibot
-```
-
-**How it works:**
-1. CLI sends HTTP hook when it completes a task
-2. clibot receives notification immediately
-3. Captures tmux output and sends to user
-
-**Pros:**
-- ✅ Real-time (instant notification)
-- ✅ Accurate (exact completion time)
-- ✅ Efficient (no polling overhead)
-
-**Cons:**
-- ⚠️ Requires CLI hook configuration
-- ⚠️ Higher setup complexity
-
-**Best for:** Production environments, performance-critical applications
-
-### Mode Selection Recommendation
+### Mode Selection
 
 **Priority: ACP > Hook**
 
-**Recommended Configuration:**
+ACP Mode provides better user experience and should be preferred when available.
+
+## 📱 Setup Bot
+
+### Feishu (Recommended)
+
+1. Create a Feishu app at [Open Platform](https://open.feishu.cn/)
+2. Get App ID and App Secret
+3. Configure bot:
 
 ```yaml
-# Option 1: ACP Mode (Best Experience)
-sessions:
-  - name: "claude"
-    cli_type: "acp"
-    work_dir: "/path/to/workspace"
-    start_cmd: "claude-agent-acp"
-    transport: "stdio://"
-
-# Option 2: Hook Mode (Second Choice)
-sessions:
-  - name: "claude"
-    cli_type: "claude"
-    work_dir: "/path/to/workspace"
-    start_cmd: "claude"
-
-cli_adapters:
-  claude:
-    # Hook mode is the only supported mode for non-ACP adapters
+bots:
+  feishu:
+    enabled: true
+    app_id: "cli_xxxxxxxxx"
+    app_secret: "xxxxxxxxxxxxxxxx"
 ```
 
-## Project Structure
+### Discord
 
-```
-clibot/
-├── cmd/                    # CLI entry point
-│   └── clibot/             # Main program
-│       ├── main.go         # Main function
-│       ├── root.go         # Cobra root command
-│       ├── serve.go        # serve command
-│       ├── hook.go         # hook command
-│       └── status.go       # status command
-├── internal/
-│   ├── core/               # Core logic
-│   ├── cli/                # CLI adapters
-│   ├── bot/                # Bot adapters
-│   ├── watchdog/           # Watchdog monitoring
-│   └── hook/               # HTTP Hook server
-└── configs/                # Configuration templates
+1. Create a Discord application at [Discord Developer Portal](https://discord.com/developers/applications)
+2. Create a bot and get token
+3. Invite bot to your server
+4. Configure:
+
+```yaml
+bots:
+  discord:
+    enabled: true
+    token: "YOUR_BOT_TOKEN"
+    channel_id: "YOUR_CHANNEL_ID"
 ```
 
-## Special Commands
+### Telegram
 
-```
-slist                              # List all sessions (static and dynamic)
-suse <session>                     # Switch current session
-snew <name> <cli_type> <work_dir> [cmd]  # Create new dynamic session (admin only)
-sdel <name>                        # Delete dynamic session (admin only)
-sclose [name]                      # Close running session (free resources)
-sstatus [name]                     # Show session status (default: all sessions)
-whoami                             # Display your current session info
-status                             # Display all session status
-echo                               # Echo your IM info (Platform, UserID, Channel)
-help                               # Show help information
+1. Create a bot via [BotFather](https://t.me/BotFather)
+2. Get bot token
+3. Configure:
+
+```yaml
+bots:
+  telegram:
+    enabled: true
+    token: "YOUR_BOT_TOKEN"
 ```
 
-### Dynamic Session Management
+## 🎮 Usage
 
-clibot supports creating and managing dynamic sessions through IM commands:
-
-**Create a new session** (admin only):
-```bash
-snew myproject claude ~/projects/myproject
-snew backend gemini ~/backend my-custom-gemini
-```
-
-**Delete a dynamic session** (admin only):
-```bash
-sdel myproject
-```
-
-**Switch between sessions**:
-```bash
-suse myproject    # Switch to session 'myproject'
-suse backend      # Switch to session 'backend'
-```
-
-💡 **Auto-start**: If a session is not running, `suse` will automatically start it. Sessions with `auto_start: false` will also be started on first use.
-
-**Session types**:
-- **Static sessions**: Configured in config.yaml, persist across restarts
-- **Dynamic sessions**: Created via IM commands, stored in memory only, lost on restart
-
-**Notes**:
-- Only admins can create/delete dynamic sessions
-- Work directory must exist before creating a session
-- Dynamic sessions count against `max_dynamic_sessions` limit (default: 50)
-- Static sessions cannot be deleted via IM (must modify config file manually)
-- Each user can have their own current session selection (independent of others)
-
-## Special Keywords
-
-Send special keys directly to the CLI tool (no prefix needed):
+### Special Commands
 
 ```
-tab            # Send Tab key (for autocomplete)
-esc            # Send Escape key
-stab/s-tab     # Send Shift+Tab
-enter          # Send Enter key
-ctrlc/ctrl-c    # Send Ctrl+C (interrupt)
-ctrlt/ctrl-t    # Send Ctrl+T
+slist                              # List all sessions
+suse <session>                     # Switch to session
+snew <name> <type> <dir> [cmd]     # Create new session (admin only)
+sdel <name>                        # Delete session (admin only)
+sclose [name]                      # Close session
+sstatus [name]                     # Show session status
+whoami                             # Show your info
+status                             # Show all session status
+echo                               # Show your IM info
+help                               # Show help
 ```
 
-**Examples:**
-- `tab` → Trigger autocomplete in CLI
-- `s-tab` → Navigate back through suggestions
-- `ctrl-c` → Interrupt current process
-- `ctrl-t` → Trigger Ctrl+T action
+### Special Keywords
 
-## Deployment
+```
+tab           # Send Tab key (autocomplete)
+esc           # Send Escape key
+s-tab         # Send Shift+Tab
+enter         # Send Enter key
+ctrl-c        # Send Ctrl+C (interrupt)
+```
 
-For production deployment, clibot can be run as a system service using systemd or supervisor.
+### Example Workflow
 
-**Quick setup (systemd)**:
+```
+You:  slist
+Bot:  Available Sessions:
+     • claude (acp)
+     • gemini (gemini)
+
+You:  suse claude
+Bot:  ✓ Switched to session: claude
+
+You:  help me write a python function to parse json
+Bot:  [AI response...]
+```
+
+## 🔧 Deployment
+
+### Run as systemd service (Linux/macOS)
+
 ```bash
 # Create systemd user directory
 mkdir -p ~/.config/systemd/user
@@ -531,14 +274,15 @@ systemctl --user daemon-reload
 systemctl --user enable clibot
 systemctl --user start clibot
 
-# Enable lingering for auto-start on login (optional)
-loginctl enable-linger $USER
+# View logs
+journalctl --user -u clibot -f
 ```
 
-**Quick setup (supervisor)**:
+### Run as supervisor service
+
 ```bash
 # Install supervisor
-sudo apt-get install supervisor  # Ubuntu/Debian
+sudo apt-get install supervisor
 
 # Install config file
 sudo cp deploy/clibot.conf /etc/supervisor/conf.d/
@@ -547,31 +291,38 @@ sudo supervisorctl update
 sudo supervisorctl start clibot
 ```
 
-**Quick setup (management script)**:
-```bash
-# For development and testing
-chmod +x deploy/clibot.sh
-./deploy/clibot.sh start
-./deploy/clibot.sh status
-./deploy/clibot.sh logs
+For detailed deployment guide, see [deploy/DEPLOYMENT.md](deploy/DEPLOYMENT.md).
+
+## 🔒 Security
+
+⚠️ **User whitelist must be enabled** (default: `whitelist_enabled: true`)
+
+Only whitelisted users can use clibot. Always configure `allowed_users` and `admins` in your config file.
+
+## 🏗️ Project Structure
+
+```
+clibot/
+├── cmd/                    # CLI entry point
+├── internal/
+│   ├── core/               # Core logic
+│   ├── cli/                # CLI adapters
+│   └── bot/                # Bot adapters
+├── configs/                # Configuration templates
+└── docs/                   # Documentation
 ```
 
-For detailed deployment instructions, including:
-- Configuration management
-- Log rotation
-- Troubleshooting
-- Security best practices
+## 📚 Documentation
 
-See [Deployment Guide](./deploy/DEPLOYMENT.md)
+- [INSTALL.md](INSTALL.md) - Installation guide
+- [docs/en/setup/cli-hooks.md](docs/en/setup/cli-hooks.md) - CLI hook configuration
+- [deploy/DEPLOYMENT.md](deploy/DEPLOYMENT.md) - Deployment guide
+- [AGENTS.md](AGENTS.md) - Development guidelines
 
-## Security
+## 🤝 Contributing
 
-clibot is essentially a remote code execution tool. **User whitelist must be enabled**. By default, `whitelist_enabled: true`, meaning only whitelisted users can use the system.
+Contributions are welcome! Please read [AGENTS.md](AGENTS.md) for development guidelines.
 
-## Contributing
+## 📄 License
 
-Please read [AGENTS.md](AGENTS.md) for development guidelines and language requirements before contributing.
-
-## License
-
-MIT
+[MIT](LICENSE)

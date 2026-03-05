@@ -31,7 +31,13 @@ bots:
     enabled: true
     token: "YOUR_BOT_TOKEN"         # Replace with your Telegram bot token
 
-# Session: ACP Mode (Recommended)
+# ==============================================================================
+# Session Configuration
+# ==============================================================================
+# NOTE: 'name' is your custom identifier (e.g., "my-project", "backend-api")
+#        'cli_type' is the AI CLI tool to use (acp, claude, gemini, opencode)
+# ==============================================================================
+
 sessions:
   - name: "my-project"
     cli_type: "acp"                 # ACP mode - streaming, no tmux needed

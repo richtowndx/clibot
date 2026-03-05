@@ -98,6 +98,22 @@ session:
 #   - ACP: Best experience, streaming, no tmux needed
 #   - Hook: Real-time, requires CLI hook configuration
 # ==============================================================================
+# Sessions Configuration
+# ==============================================================================
+# Each session represents a connection to an AI CLI tool.
+#
+# IMPORTANT: Session name vs CLI type
+#   - name: Your custom identifier for this session (e.g., "my-project", "backend-api")
+#   - cli_type: The AI CLI tool to use (acp, claude, gemini, opencode)
+#
+# The session name is just a label you choose to identify the session.
+# It does NOT need to match the CLI type!
+#
+# Example:
+#   sessions:
+#     - name: "my-website"        # ← Your custom name (could be anything)
+#       cli_type: "claude"        # ← The actual CLI tool
+# ==============================================================================
 sessions:
   # ============================================================================
   # ACP Mode Sessions (Recommended)
@@ -105,7 +121,7 @@ sessions:
 
   # Example 1: Claude Code with ACP (Best Experience)
   # Requires: claude-agent-acp installed
-  - name: "claude-acp"
+  - name: "my-acp-session"
     cli_type: "acp"
     work_dir: "/home/user/projects/my-project"   # ABSOLUTE path required
     start_cmd: "claude-agent-acp"                # ACP server command
@@ -114,7 +130,7 @@ sessions:
 
   # Example 2: Gemini CLI with ACP
   # Requires: gemini with --experimental-acp flag
-  # - name: "gemini-acp"
+  # - name: "my-gemini-session"
   #   cli_type: "acp"
   #   work_dir: "/home/user/projects/my-project"
   #   start_cmd: "gemini --experimental-acp"
@@ -122,13 +138,13 @@ sessions:
   #   auto_start: true
 
   # Example 3: ACP remote via TCP
-  # - name: "claude-remote-tcp"
+  # - name: "my-remote-session"
   #   cli_type: "acp"
   #   work_dir: "/home/user/projects/demo"
   #   transport: "tcp://127.0.0.1:9000"
 
   # Example 4: ACP remote via Unix socket
-  # - name: "claude-unix"
+  # - name: "my-unix-session"
   #   cli_type: "acp"
   #   work_dir: "/home/user/projects/demo"
   #   transport: "unix:///tmp/acp.sock"
@@ -139,20 +155,20 @@ sessions:
 
   # Example 5: Claude Code with Hook mode
   # Requires: claude CLI installed with hook configuration
-  # - name: "claude-project"
+  # - name: "my-project"
   #   cli_type: "claude"
   #   work_dir: "/home/user/projects/my-project"   # ABSOLUTE path required
   #   auto_start: true
   #   # start_cmd: "claude"                        # Optional: Custom startup command
 
   # Example 6: Gemini CLI with Hook mode
-  # - name: "gemini-tests"
+  # - name: "my-tests"
   #   cli_type: "gemini"
   #   work_dir: "/home/user/backend-tests"
   #   auto_start: false                           # Don't auto-start
 
   # Example 7: OpenCode with Hook mode
-  # - name: "opencode-work"
+  # - name: "my-work"
   #   cli_type: "opencode"
   #   work_dir: "/path/to/workdir"
   #   auto_start: true

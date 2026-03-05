@@ -6,153 +6,25 @@
 
 [English](./README.md) | 中文版
 
-clibot 是一个轻量级的中间层，将各种 IM 平台（飞书、Discord、Telegram 等）与 AI CLI 工具（Claude Code、Gemini CLI、OpenCode 等）连接起来，让用户可以通过聊天界面远程使用 AI 编程助手。
+clibot 是一个轻量级中间件，将各种 IM 平台（飞书、Discord、Telegram 等）与 AI CLI 工具（Claude Code、Gemini CLI、OpenCode 等）连接起来，让你可以直接在手机或平板上使用强大的桌面 AI 编程助手。
 
-## 特性
+## ✨ 特性
 
-- **无需公网 IP**: 所有 Bot 均采用长连接方式（WebSocket/长轮询）接入。您可以将 clibot 部署在家庭或公司内网电脑上，无需任何端口转发或公网 IP 即可在外部访问。
-- **随时随地**: 在手机、平板等设备上通过 IM 使用强大的桌面端 AI CLI
-- **统一入口**: 一个 IM Bot 管理多个 AI CLI 工具，切换简单
-- **灵活扩展**: 抽象接口设计 - 只需实现接口即可添加新的 CLI 或 Bot
-- **透明代理**: 绝大部分输入直接透传给 CLI，保持原生使用体验
-- **ACP 支持**: Agent Client Protocol 模式支持流式响应、全双工通信，且兼容的 AI CLI 无需 tmux 即可运行
+- **🌍 无需公网 IP**：所有机器人通过长连接（WebSocket/长轮询）连接，可在 NAT 后的家用/办公电脑上部署
+- **📱 随时随地访问**：通过手机 IM 应用使用桌面 AI 工具
+- **🎯 统一入口**：通过单个机器人管理多个 AI 工具
+- **🔌 灵活扩展**：通过实现接口添加新的 CLI 或 Bot
+- **⚡ ACP 支持**：流式响应，无需 tmux（兼容的 CLI）
 
-## 快速开始
+## 🚀 快速开始
 
 ### 前置要求
 
-### 操作系统
+- **Go 1.24+**
+- [**机器人账号**](#配置机器人)（飞书/Discord/Telegram）
+- [**ACP 兼容的 CLI**](#acp-模式推荐)（如 claude-agent-acp）或 **tmux**（Hook 模式）
 
-**支持的平台**：
-- ✅ **Linux** - 完全支持（Ubuntu、Debian、Fedora、CentOS、Arch 等）
-- ✅ **macOS** - 完全支持
-- ⚠️ **Windows** - 仅通过 WSL2（Windows Subsystem for Linux）支持
-
-**为什么不支持 Windows 原生？**
-clibot 依赖 `tmux` 进行会话管理，而 Windows 原生不支持 tmux。
-
-**Windows 用户**：建议使用 WSL2 以获得最佳体验：
-```bash
-# 在 Windows 10/11 上安装 WSL2
-wsl --install
-
-# 安装后，将 WSL2 设置为默认版本
-wsl --set-default-version 2
-
-# 然后在 WSL 终端中按照 Linux 说明操作
-```
-
-详见下方的 [Windows 安装指南](#windows-安装指南)。
-
-### 必需软件
-
-- **Go**：1.24 或更高版本
-- **tmux**：会话管理所需（clibot 创建和管理 tmux 会话）
-- **Git**：克隆仓库所需（如果从源码安装）
-
-**安装 tmux**：
-```bash
-# Ubuntu/Debian
-sudo apt-get install tmux
-
-# macOS
-brew install tmux
-
-# Fedora/CentOS/RHEL
-sudo dnf install tmux
-
-# Arch Linux
-sudo pacman -S tmux
-```
-
-### Windows 安装指南 (WSL2)
-
-clibot 可以在 Windows 上使用 WSL2（Windows Subsystem for Linux）运行。
-
-**步骤 1：安装 WSL2**
-
-以管理员身份打开 PowerShell 或命令提示符：
-
-```powershell
-# 启用 WSL
-wsl --install
-
-# 出现提示时重启计算机
-```
-
-**步骤 2：将 WSL2 设置为默认版本**
-
-```powershell
-wsl --set-default-version 2
-```
-
-**步骤 3：安装 Ubuntu（或其他 Linux 发行版）**
-
-```powershell
-# 查看可用的发行版
-wsl --list --online
-
-# 安装 Ubuntu（推荐）
-wsl --install -d Ubuntu
-```
-
-**步骤 4：完成 Ubuntu 设置**
-
-1. 从开始菜单启动 Ubuntu
-2. 创建用户名和密码
-3. 更新软件包：
-
-```bash
-# 在 WSL Ubuntu 终端中
-sudo apt update && sudo apt upgrade -y
-```
-
-**步骤 5：在 WSL 中安装必需工具**
-
-```bash
-# 安装 Go
-sudo apt install golang-go -y
-
-# 或从网站安装最新版 Go
-wget https://go.dev/dl/go1.24.0.linux-amd64.tar.gz
-sudo tar -C /usr/local -xzf go1.24.0.linux-amd64.tar.gz
-echo 'export PATH=$PATH:/usr/local/go/bin' >> ~/.bashrc
-source ~/.bashrc
-
-# 安装 tmux
-sudo apt install tmux -y
-
-# 安装 Git
-sudo apt install git -y
-```
-
-**步骤 6：安装并运行 clibot**
-
-```bash
-# 在 WSL Ubuntu 终端中
-go install github.com/keepmind9/clibot@latest
-
-# 配置
-mkdir -p ~/.config/clibot
-cp /mnt/c/path/to/clibot/configs/config.yaml ~/.config/clibot/config.yaml
-nano ~/.config/clibot/config.yaml
-
-# 运行 clibot
-clibot serve --config ~/.config/clibot/config.yaml
-```
-
-**Windows + WSL2 使用技巧**：
-
-- 从 WSL 访问 Windows 文件：`/mnt/c/Users/你的用户名/...`
-- 从 Windows 访问 WSL 文件：`\\wsl$\Ubuntu\home\你的用户名\...`
-- 将 clibot 作为后台服务运行：在 WSL 内使用 systemd
-- 无需配置防火墙（Bot 使用长连接，无需开放入站端口）
-- 所有通信都是出站到 IM 平台（WebSocket/长轮询）
-
-**限制**：
-- 剪贴板集成可能不够流畅
-- 需要文件路径转换（WSL ↔ Windows）
-- 性能略低于原生 Linux
+详细的安装说明请参阅 [INSTALL.md](INSTALL.md)。
 
 ### 安装
 
@@ -160,365 +32,238 @@ clibot serve --config ~/.config/clibot/config.yaml
 go install github.com/keepmind9/clibot@latest
 ```
 
-**注意**：二进制文件将安装到 `$GOPATH/bin/clibot`（通常是 `~/go/bin/clibot`）。
-确保 `~/go/bin` 在您的 PATH 中：
+二进制文件将安装到 `~/go/bin/clibot`。确保它在你的 PATH 中：
+
 ```bash
 export PATH=$PATH:~/go/bin
 ```
 
+## 🔑 获取你的用户 ID
+
+配置 clibot 之前，你需要从 IM 平台获取你的用户 ID，用于配置白名单和管理员。
+
+### 快速方法
+
+**步骤 1：** 临时禁用白名单启动 clibot：
+
+```yaml
+# ~/temp_config.yaml
+security:
+  whitelist_enabled: false  # 临时禁用
+
+bots:
+  telegram:
+    enabled: true
+    token: "YOUR_BOT_TOKEN"
+```
+
+**步骤 2：** 运行 clibot：
+
+```bash
+clibot serve --config ~/temp_config.yaml
+```
+
+**步骤 3：** 向你的机器人发送 `whoami` 命令：
+
+```
+whoami
+```
+
+**步骤 4：** 机器人回复你的用户 ID：
+
+```
+你的信息：
+平台: telegram
+用户 ID: 123456789
+```
+
+**步骤 5：** 使用你的实际用户 ID 更新配置：
+
+```yaml
+security:
+  whitelist_enabled: true
+  allowed_users:
+    telegram:
+      - "123456789"  # 你的实际用户 ID
+  admins:
+    telegram:
+      - "123456789"  # 你的实际用户 ID
+```
+
+**重要：** 删除 `~/temp_config.yaml` 并使用正确的配置重启。
+
 ### 配置
 
-1. 复制配置模板：
-
 ```bash
-# 精简版：只包含必需项（推荐新手）
+# 创建配置目录
+mkdir -p ~/.config/clibot
+
+# 复制配置模板
 cp configs/config.mini.yaml ~/.config/clibot/config.yaml
 
-# 完整版：所有选项和详细说明
-cp configs/config.full.yaml ~/.config/clibot/config.yaml
+# 编辑配置（替换 YOUR_* 占位符）
+nano ~/.config/clibot/config.yaml
 ```
 
-2. 编辑配置文件，填写您的 Bot 凭据和白名单用户。
+### 运行
 
-3. 选择运行模式（见下文）：
-
-**方案 A: ACP 模式（推荐）**
-- 无需 tmux，流式响应
-- 完整功能支持
-- 需要 ACP 兼容的 CLI（如 claude-agent-acp）
-
-```yaml
-sessions:
-  - name: "claude"
-    cli_type: "acp"
-    work_dir: "/path/to/workspace"
-    start_cmd: "claude-agent-acp"
-    transport: "stdio://"
-```
-
-**方案 B: Hook 模式**
-- 需要配置 CLI 的 Hook
-- 实时通知
-- 详见 [CLI Hook 配置指南](./docs/zh-CN/setup/cli-hooks.md)。
-
-### 使用
-
-```bash
-# 以服务模式运行
-clibot serve --config ~/.config/clibot/config.yaml
-
-# 检查状态
-clibot status
-```
-
-## 命令
-
-### serve
-
-启动 clibot 服务以处理 IM 消息和管理 CLI 会话。
-
-```bash
-clibot serve [flags]
-```
-
-**参数:**
-- `-c, --config <file>`: 配置文件路径（默认: 当前目录的 `config.yaml`）
-- `--validate`: 验证配置后退出
-
-**示例:**
 ```bash
 clibot serve --config ~/.config/clibot/config.yaml
-clibot serve --config /etc/clibot/config.yaml
 ```
 
-### validate
+## 💡 运行模式
 
-验证 clibot 配置文件而不启动服务。
+### ACP 模式（推荐）⭐
 
-```bash
-clibot validate [flags]
-```
+**适用于：** claude-agent-acp、支持 ACP 的 Gemini CLI、支持 ACP 的 OpenCode
 
-**参数:**
-- `-c, --config <file>`: 配置文件路径（默认: 当前目录的 `config.yaml`）
-- `--show`: 显示完整配置详情
-- `--json`: 以 JSON 格式输出
-
-**退出码:**
-- `0`: 配置有效
-- `1`: 配置有错误
-
-**示例:**
-```bash
-clibot validate
-clibot validate --config ~/my-config.yaml
-clibot validate --show
-clibot validate --json
-```
-
-### status
-
-显示 clibot 状态和版本信息。
-
-```bash
-clibot status [flags]
-```
-
-**参数:**
-- `-p, --port <number>`: 检查服务是否在指定端口运行
-- `--json`: 以 JSON 格式输出
-
-**示例:**
-```bash
-clibot status
-clibot status --port 8080
-clibot status --json
-```
-
-**输出:**
-- 显示 clibot 版本
-- 检查服务是否运行（当使用 `--port` 时）
-
-### version
-
-显示详细的版本信息。
-
-```bash
-clibot version [flags]
-```
-
-**参数:**
-- `--json`: 以 JSON 格式输出
-
-**示例:**
-```bash
-clibot version
-clibot version --json
-```
-
-**输出包括:**
-- 版本号
-- 构建时间
-- Git 分支
-- Git 提交哈希
-
-### hook
-
-内部命令，由 CLI hook 调用，用于通知主进程事件。此命令由 hook 模式配置使用。
-
-```bash
-clibot hook --cli-type <type> [flags]
-```
-
-**参数:**
-- `--cli-type <type>`: CLI 类型（claude/gemini/opencode/acp）**[必填]**
-- `-p, --port <number>`: Hook 服务器端口（默认: 8080）
-
-**用法:**
-此命令从标准输入读取 JSON 事件数据，并通过 HTTP 转发到主进程。
-
-**示例:**
-```bash
-echo '{"session":"my-session","event":"completed"}' | clibot hook --cli-type claude
-cat hook-data.json | clibot hook --cli-type gemini
-cat hook-data.json | clibot hook --cli-type claude --port 9000
-```
-
-**注意:** 此命令通常由配置了 hook 的 CLI 工具自动调用，而不是由用户手动调用。
-
-详见 [CLI Hook 配置指南](./docs/zh-CN/setup/cli-hooks.md)。
-
-## 运行模式
-
-clibot 支持两种模式来连接 AI CLI 工具：
-
-### ACP 模式 (Agent Client Protocol) - **推荐**
-
-**前置要求:**
-
-ACP 模式需要 CLI 工具支持 Agent Client Protocol。
-
-- **Claude Code CLI**: 需要安装第三方 ACP 适配器
-  ```bash
-  npm install -g @zed-industries/claude-agent-acp
-  ```
-
-- **Gemini CLI**: 使用 `--experimental-acp` 参数启用 ACP 模式
-- **OpenCode CLI**: 使用 `--acp` 参数启用 ACP 模式
-- **其他 CLI**: 请查看各 CLI 工具的官方文档确认 ACP 相关参数
-
-**配置:**
-```yaml
-sessions:
-  - name: "claude"
-    cli_type: "acp"
-    work_dir: "/path/to/workspace"
-    start_cmd: "claude-agent-acp"  # 或其他 ACP 兼容的 CLI
-    transport: "stdio://"
-```
-
-**工作原理:**
-1. ACP 服务器作为子进程（stdio）或远程连接（TCP/Unix socket）启动
-2. 客户端通过 Agent Client Protocol 建立连接
-3. 服务器调用 NewSession 创建会话
-4. 客户端使用 sessionId 发送 Prompt 请求
-5. 服务器通过 SessionUpdate 回调流式传输响应
-6. 响应通过 SendResponseToSession 直接发送给用户
-
-**优点:**
+**优势：**
 - ✅ 无需 tmux
 - ✅ 流式响应（实时）
 - ✅ 全双工通信
-- ✅ 完整功能支持
+- ✅ 适用于所有平台
 
-**缺点:**
-- ⚠️ 需要支持 ACP 的 CLI（如 claude-agent-acp、gemini --experimental-acp）
-- ⚠️ 连接建立可能需要时间（重试最多 30 秒）
+**配置：**
+```yaml
+sessions:
+  - name: "my-project"
+    cli_type: "acp"
+    work_dir: "/path/to/project"
+    start_cmd: "claude-agent-acp"
+    transport: "stdio://"
+```
+
+**设置 ACP CLI：**
+```bash
+# 为 Claude Code 安装 ACP 适配器
+npm install -g @zed-industries/claude-agent-acp
+
+# Gemini CLI
+gemini --experimental-acp
+
+# OpenCode CLI
+opencode --acp
+```
 
 ### Hook 模式
 
-**配置:**
+**适用于：** Claude Code、Gemini CLI、OpenCode（默认模式）
+
+**优势：**
+- ✅ 实时通知
+- ✅ 精确的完成检测
+
+**要求：**
+- ⚠️ 需要 tmux
+- ⚠️ 需要 CLI hook 配置
+
+**配置：**
 ```yaml
-# Hook 模式是非 ACP 适配器的默认模式
-# 无需额外配置，CLI 只需要配置发送 hook 到 clibot
+sessions:
+  - name: "my-project"
+    cli_type: "claude"
+    work_dir: "/path/to/project"
+    start_cmd: "claude"
 ```
 
-**工作原理:**
-1. CLI 在完成任务时发送 HTTP Hook
-2. clibot 立即收到通知
-3. 捕获 tmux 输出并发送给用户
+详细配置请参阅 [CLI Hook 配置指南](./docs/zh/setup/cli-hooks.md)。
 
-**优点:**
-- ✅ 实时（即时通知）
-- ✅ 准确（精确的完成时间）
-- ✅ 高效（无轮询开销）
-
-**缺点:**
-- ⚠️ 需要配置 CLI Hook
-- ⚠️ 设置略微复杂
-
-**适用场景:** 生产环境、对性能要求高的应用
-
-### 模式选择建议
+### 模式选择
 
 **优先级：ACP > Hook**
 
-**推荐配置：**
+ACP 模式提供更好的用户体验，在可用时应优先选择。
+
+## 📱 配置机器人
+
+### 飞书（推荐）
+
+1. 在[开放平台](https://open.feishu.cn/)创建飞书应用
+2. 获取 App ID 和 App Secret
+3. 配置机器人：
 
 ```yaml
-# 方案 1：ACP 模式（最佳体验）
-sessions:
-  - name: "claude"
-    cli_type: "acp"
-    work_dir: "/path/to/workspace"
-    start_cmd: "claude-agent-acp"
-    transport: "stdio://"
-
-# 方案 2：Hook 模式（次选）
-sessions:
-  - name: "claude"
-    cli_type: "claude"
-    work_dir: "/path/to/workspace"
-    start_cmd: "claude"
-
-cli_adapters:
-  claude:
-    # Hook 模式是非 ACP 适配器唯一支持的模式
+bots:
+  feishu:
+    enabled: true
+    app_id: "cli_xxxxxxxxx"
+    app_secret: "xxxxxxxxxxxxxxxx"
 ```
 
-## 项目结构
+### Discord
 
-```
-clibot/
-├── cmd/                    # CLI 入口
-│   └── clibot/             # 主程序
-│       ├── main.go         # 入口函数
-│       ├── root.go         # Cobra 根命令
-│       ├── serve.go        # serve 命令
-│       ├── hook.go         # hook 命令
-│       └── status.go       # status 命令
-├── internal/
-│   ├── core/               # 核心逻辑
-│   ├── cli/                # CLI 适配器
-│   ├── bot/                # Bot 适配器
-│   ├── watchdog/           # Watchdog 监控
-│   └── hook/               # HTTP Hook 服务
-└── configs/                # 配置模板
+1. 在 [Discord 开发者门户](https://discord.com/developers/applications)创建 Discord 应用
+2. 创建机器人并获取令牌
+3. 邀请机器人到你的服务器
+4. 配置：
+
+```yaml
+bots:
+  discord:
+    enabled: true
+    token: "YOUR_BOT_TOKEN"
+    channel_id: "YOUR_CHANNEL_ID"
 ```
 
-## 特殊命令
+### Telegram
+
+1. 通过 [BotFather](https://t.me/BotFather)创建机器人
+2. 获取机器人令牌
+3. 配置：
+
+```yaml
+bots:
+  telegram:
+    enabled: true
+    token: "YOUR_BOT_TOKEN"
+```
+
+## 🎮 使用方法
+
+### 特殊命令
 
 ```
-slist                              # 列出所有会话（静态和动态）
-suse <session>                     # 切换当前会话
-snew <name> <cli_type> <work_dir> [cmd]  # 创建新的动态会话（仅管理员）
-sdel <name>                        # 删除动态会话（仅管理员）
-sclose [name]                      # 关闭正在运行的会话（释放资源）
-sstatus [name]                     # 显示会话状态（默认：所有会话）
-whoami                             # 显示您当前会话信息
+slist                              # 列出所有会话
+suse <session>                     # 切换到指定会话
+snew <name> <type> <dir> [cmd]     # 创建新会话（仅管理员）
+sdel <name>                        # 删除会话（仅管理员）
+sclose [name]                      # 关闭会话
+sstatus [name]                     # 显示会话状态
+whoami                             # 显示你的信息
 status                             # 显示所有会话状态
-echo                               # 回显您的 IM 信息（平台, 用户ID, 频道ID）
-help                               # 显示帮助信息
+echo                               # 显示你的 IM 信息
+help                               # 显示帮助
 ```
 
-### 动态会话管理
-
-clibot 支持通过 IM 命令创建和管理动态会话：
-
-**创建新会话**（仅管理员）：
-```bash
-snew myproject claude ~/projects/myproject
-snew backend gemini ~/backend my-custom-gemini
-```
-
-**删除动态会话**（仅管理员）：
-```bash
-sdel myproject
-```
-
-**切换会话**：
-```bash
-suse myproject    # 切换到会话 'myproject'
-suse backend      # 切换到会话 'backend'
-```
-
-💡 **自动启动**：如果会话未运行，`suse` 会自动启动它。`auto_start: false` 的会话也会在首次使用时自动启动。
-
-**会话类型**：
-- **静态会话**：在 config.yaml 中配置，重启后保留
-- **动态会话**：通过 IM 命令创建，仅存储在内存中，重启后丢失
-
-**注意事项**：
-- 只有管理员可以创建/删除动态会话
-- 工作目录必须在创建会话前存在
-- 动态会话会计入 `max_dynamic_sessions` 限制（默认: 50）
-- 静态会话无法通过 IM 删除（需要手动修改配置文件）
-- 每个用户可以独立选择自己的当前会话（互不影响）
-
-## 特殊关键词
-
-直接向 CLI 工具发送特殊按键（无需前缀）：
+### 特殊关键词
 
 ```
-tab            # 发送 Tab 键 (用于自动补全)
-esc            # 发送 Escape 键
-stab/s-tab     # 发送 Shift+Tab
-enter          # 发送 Enter 键
-ctrlc/ctrl-c    # 发送 Ctrl+C (中断)
-ctrlt/ctrl-t    # 发送 Ctrl+T
+tab           # 发送 Tab 键（自动完成）
+esc           # 发送 Escape 键
+s-tab         # 发送 Shift+Tab
+enter         # 发送 Enter 键
+ctrl-c        # 发送 Ctrl+C（中断）
 ```
 
-**示例:**
-- `tab` → 触发 CLI 中的自动补全
-- `s-tab` → 在建议中向后导航
-- `ctrl-c` → 中断当前进程
-- `ctrl-t` → 触发 Ctrl+T 操作
+### 使用示例
 
-## 部署
+```
+你:  slist
+Bot: 可用会话：
+     • claude (acp)
+     • gemini (gemini)
 
-在生产环境中，clibot 可以使用 systemd 或 supervisor 作为系统服务运行。
+你:  suse claude
+Bot: ✓ 已切换到会话：claude
 
-**快速设置（systemd）**：
+你:  帮我写一个 Python 函数来解析 JSON
+Bot:  [AI 响应...]
+```
+
+## 🔧 部署
+
+### 作为 systemd 服务运行（Linux/macOS）
+
 ```bash
 # 创建 systemd 用户目录
 mkdir -p ~/.config/systemd/user
@@ -529,14 +274,15 @@ systemctl --user daemon-reload
 systemctl --user enable clibot
 systemctl --user start clibot
 
-# 启用 lingering 以实现登录时自动启动（可选）
-loginctl enable-linger $USER
+# 查看日志
+journalctl --user -u clibot -f
 ```
 
-**快速设置（supervisor）**：
+### 作为 supervisor 服务运行
+
 ```bash
 # 安装 supervisor
-sudo apt-get install supervisor  # Ubuntu/Debian
+sudo apt-get install supervisor
 
 # 安装配置文件
 sudo cp deploy/clibot.conf /etc/supervisor/conf.d/
@@ -545,31 +291,38 @@ sudo supervisorctl update
 sudo supervisorctl start clibot
 ```
 
-**快速设置（管理脚本）**：
-```bash
-# 用于开发和测试
-chmod +x deploy/clibot.sh
-./deploy/clibot.sh start
-./deploy/clibot.sh status
-./deploy/clibot.sh logs
+详细部署指南请参阅 [deploy/DEPLOYMENT.md](deploy/DEPLOYMENT.md)。
+
+## 🔒 安全性
+
+⚠️ **必须启用用户白名单**（默认：`whitelist_enabled: true`）
+
+只有白名单用户才能使用 clibot。始终在配置文件中配置 `allowed_users` 和 `admins`。
+
+## 🏗️ 项目结构
+
+```
+clibot/
+├── cmd/                    # CLI 入口
+├── internal/
+│   ├── core/               # 核心逻辑
+│   ├── cli/                # CLI 适配器
+│   └── bot/                # Bot 适配器
+├── configs/                # 配置模板
+└── docs/                   # 文档
 ```
 
-详细的部署说明，包括：
-- 配置管理
-- 日志轮转
-- 故障排查
-- 安全最佳实践
+## 📚 文档
 
-参见 [部署指南](./deploy/DEPLOYMENT_zh.md)
+- [INSTALL.md](INSTALL.md) - 安装指南
+- [docs/zh/setup/cli-hooks.md](docs/zh/setup/cli-hooks.md) - CLI hook 配置
+- [deploy/DEPLOYMENT.md](deploy/DEPLOYMENT.md) - 部署指南
+- [AGENTS.md](AGENTS.md) - 开发指南
 
-## 安全
+## 🤝 贡献
 
-clibot 本质上是一个远程代码执行工具。**必须启用用户白名单**。默认情况下 `whitelist_enabled: true`，即只有白名单中的用户可以使用系统。
+欢迎贡献！请阅读 [AGENTS.md](AGENTS.md) 了解开发指南。
 
-## 贡献
+## 📄 许可证
 
-请在贡献前阅读 [AGENTS.md](AGENTS.md) 了解开发指南和语言要求。
-
-## 开源协议
-
-MIT
+[MIT](LICENSE)
