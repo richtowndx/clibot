@@ -96,6 +96,8 @@ type Engine struct {
 	hookServer      *http.Server              // HTTP server for hooks
 	sessionChannels map[string]BotChannel     // Session name -> active bot channel (for routing responses)
 	userSessions    map[string]string         // User key (platform:userID) -> current session name
+	cmdLocksMu      sync.RWMutex              // Protects sessionCmdLocks map
+	sessionCmdLocks map[string]*sync.Mutex    // Per-session command locks (prevents concurrent commands on same session)
 	ctx             context.Context           // Context for cancellation
 	cancel          context.CancelFunc        // Cancel function for graceful shutdown
 }
@@ -122,7 +124,8 @@ func NewEngine(config *Config) *Engine {
 		sessions:        make(map[string]*Session),
 		messageChan:     make(chan bot.BotMessage, constants.MessageChannelBufferSize),
 		sessionChannels: make(map[string]BotChannel),
-		userSessions:    make(map[string]string), // user key -> current session name
+		userSessions:    make(map[string]string),
+		sessionCmdLocks: make(map[string]*sync.Mutex),
 		ctx:             ctx,
 		cancel:          cancel,
 	}
@@ -288,7 +291,91 @@ func (e *Engine) runEventLoop(ctx context.Context) {
 
 // HandleBotMessage is the callback function for bots to deliver messages
 func (e *Engine) HandleBotMessage(msg bot.BotMessage) {
+	// Fast-track: special commands are processed immediately without queueing
+	// This allows commands like slist, sstatus, whoami to respond instantly
+	input := strings.TrimSpace(msg.Content)
+	cmd, isSpecialCmd, args := isSpecialCommand(input)
+
+	if isSpecialCmd {
+		// Special commands are processed asynchronously for immediate response
+		logger.WithFields(logrus.Fields{
+			"command": cmd,
+			"args":    args,
+			"user":    msg.UserID,
+		}).Info("special-command-fast-track")
+
+		go e.handleSpecialCommandWithAuth(cmd, args, msg)
+		return
+	}
+
+	// Regular AI requests enter the message queue for serial processing
 	e.messageChan <- msg
+}
+
+// handleSpecialCommandWithAuth handles special commands with authorization check
+// getSessionCmdLock gets or creates a mutex for the specified session
+// This ensures commands for the same session are executed serially
+func (e *Engine) getSessionCmdLock(sessionName string) *sync.Mutex {
+	e.cmdLocksMu.Lock()
+	defer e.cmdLocksMu.Unlock()
+
+	if e.sessionCmdLocks[sessionName] == nil {
+		e.sessionCmdLocks[sessionName] = &sync.Mutex{}
+	}
+	return e.sessionCmdLocks[sessionName]
+}
+
+// requiresSessionLock checks if a command requires per-session locking
+// Commands that modify or query a specific session state require locking
+// Global commands like slist, whoami, help do not require locking
+func requiresSessionLock(command string) bool {
+	switch command {
+	case "suse", "sclose", "sdel", "sstatus":
+		return true
+	default:
+		return false
+	}
+}
+
+func (e *Engine) handleSpecialCommandWithAuth(command string, args []string, msg bot.BotMessage) {
+	// help and echo bypass whitelist to allow users to get help and their user_id
+	if command == "help" || command == "echo" {
+		e.HandleSpecialCommandWithArgs(command, args, msg)
+		return
+	}
+
+	// Other commands require whitelist authorization
+	if !e.config.IsUserAuthorized(msg.Platform, msg.UserID) {
+		logger.WithFields(logrus.Fields{
+			"platform": msg.Platform,
+			"user":     msg.UserID,
+		}).Warn("unauthorized-special-command")
+		e.SendToBot(msg.Platform, msg.Channel, "❌ Unauthorized: Please contact administrator")
+		return
+	}
+
+	// Authorization passed, execute the command
+	// For session-specific commands, use TryLock to prevent concurrent execution
+	if requiresSessionLock(command) && len(args) > 0 {
+		sessionName := args[0]
+
+		lock := e.getSessionCmdLock(sessionName)
+		if !lock.TryLock() {
+			// Lock is held by another command for this session
+			logger.WithFields(logrus.Fields{
+				"session": sessionName,
+				"command": command,
+				"user":    msg.UserID,
+			}).Warn("session-command-lock-held")
+
+			e.SendToBot(msg.Platform, msg.Channel,
+				"⚠️  This session is currently processing another command. Please try again later.")
+			return
+		}
+		defer lock.Unlock()
+	}
+
+	e.HandleSpecialCommandWithArgs(command, args, msg)
 }
 
 // HandleUserMessage processes a message from a user
