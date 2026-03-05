@@ -21,6 +21,9 @@ security:
   allowed_users:
     telegram:
       - "YOUR_TELEGRAM_USER_ID"    # Replace with your Telegram user ID (number)
+  admins:
+    telegram:
+      - "YOUR_TELEGRAM_USER_ID"    # Admin users can manage sessions (sdel, sclose, etc.)
 
 # Telegram Bot Configuration
 bots:
