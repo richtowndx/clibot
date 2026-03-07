@@ -227,3 +227,75 @@ func TestEngine_HandleDeleteSession_NoArgs(t *testing.T) {
 	// Should send error message
 	assert.Equal(t, 1, mockBot.messageCount)
 }
+
+// TestEngine_HandleNewSession_NonACPWithoutHookServer tests creating non-ACP session when hook server is not running
+func TestEngine_HandleNewSession_NonACPWithoutHookServer(t *testing.T) {
+	config := &Config{
+		Sessions: []SessionConfig{
+			{Name: "test", CLIType: "acp", WorkDir: "/tmp"}, // Only ACP sessions
+		},
+		Security: SecurityConfig{
+			Admins: map[string][]string{
+				"testbot": {"user123"},
+			},
+		},
+	}
+	engine := NewEngine(config)
+
+	// Register CLI adapter (using nil is sufficient for this test)
+	engine.RegisterCLIAdapter("claude", nil)
+
+	mockBot := &mockBotAdapter{}
+	engine.RegisterBotAdapter("testbot", mockBot)
+
+	msg := bot.BotMessage{
+		Platform: "testbot",
+		Channel:  "test-channel",
+		UserID:   "user123", // Admin
+	}
+
+	// Try to create a non-ACP session when hook server is not running
+	engine.handleNewSession([]string{"newsession", "claude", "/tmp"}, msg)
+
+	// Should send error about hook server not running
+	assert.Equal(t, 1, mockBot.messageCount)
+	assert.Contains(t, mockBot.lastMessage, "HTTP hook server is not running")
+	assert.Contains(t, mockBot.lastMessage, "All configured sessions are ACP type")
+}
+
+// TestEngine_HandleNewSession_ACPWithoutHookServer tests creating ACP session when hook server is not running
+func TestEngine_HandleNewSession_ACPWithoutHookServer(t *testing.T) {
+	config := &Config{
+		Sessions: []SessionConfig{
+			{Name: "test", CLIType: "acp", WorkDir: "/tmp"}, // Only ACP sessions
+		},
+		Security: SecurityConfig{
+			Admins: map[string][]string{
+				"testbot": {"user123"},
+			},
+		},
+	}
+	engine := NewEngine(config)
+
+	// Register CLI adapter (using nil is sufficient for this test)
+	engine.RegisterCLIAdapter("acp", nil)
+
+	mockBot := &mockBotAdapter{}
+	engine.RegisterBotAdapter("testbot", mockBot)
+
+	msg := bot.BotMessage{
+		Platform: "testbot",
+		Channel:  "test-channel",
+		UserID:   "user123", // Admin
+	}
+
+	// Try to create an ACP session (should work even without hook server)
+	// This test verifies the check only applies to non-ACP sessions
+	// Note: This will fail at directory validation since we don't create /tmp/test-acp,
+	// but we should NOT get the "hook server not running" error
+	engine.handleNewSession([]string{"new-acp", "acp", "/tmp/test-acp"}, msg)
+
+	// Should NOT send error about hook server (may fail at directory check instead)
+	assert.Equal(t, 1, mockBot.messageCount)
+	assert.NotContains(t, mockBot.lastMessage, "HTTP hook server is not running")
+}

@@ -117,3 +117,56 @@ func TestEngine_SendToAllBots_WithRealBots(t *testing.T) {
 	assert.Equal(t, 2, mockBot2.messageCount)
 	assert.Equal(t, 2, mockBot3.messageCount)
 }
+
+// TestEngine_NeedsHookServer_AllACPSessions_ReturnsFalse tests needsHookServer with all ACP sessions
+func TestEngine_NeedsHookServer_AllACPSessions_ReturnsFalse(t *testing.T) {
+	config := &Config{
+		Sessions: []SessionConfig{
+			{Name: "acp-session-1", CLIType: "acp", WorkDir: "/tmp/test1"},
+			{Name: "acp-session-2", CLIType: "acp", WorkDir: "/tmp/test2"},
+		},
+	}
+	engine := NewEngine(config)
+
+	// All sessions are ACP, should not need hook server
+	assert.False(t, engine.needsHookServer())
+}
+
+// TestEngine_NeedsHookServer_MixedSessionTypes_ReturnsTrue tests needsHookServer with mixed session types
+func TestEngine_NeedsHookServer_MixedSessionTypes_ReturnsTrue(t *testing.T) {
+	config := &Config{
+		Sessions: []SessionConfig{
+			{Name: "acp-session", CLIType: "acp", WorkDir: "/tmp/test1"},
+			{Name: "claude-session", CLIType: "claude", WorkDir: "/tmp/test2"},
+		},
+	}
+	engine := NewEngine(config)
+
+	// Has non-ACP session, should need hook server
+	assert.True(t, engine.needsHookServer())
+}
+
+// TestEngine_NeedsHookServer_NonACPSessions_ReturnsTrue tests needsHookServer with non-ACP sessions
+func TestEngine_NeedsHookServer_NonACPSessions_ReturnsTrue(t *testing.T) {
+	config := &Config{
+		Sessions: []SessionConfig{
+			{Name: "claude-session", CLIType: "claude", WorkDir: "/tmp/test1"},
+			{Name: "gemini-session", CLIType: "gemini", WorkDir: "/tmp/test2"},
+		},
+	}
+	engine := NewEngine(config)
+
+	// All non-ACP sessions, should need hook server
+	assert.True(t, engine.needsHookServer())
+}
+
+// TestEngine_NeedsHookServer_NoSessions_ReturnsFalse tests needsHookServer with no sessions
+func TestEngine_NeedsHookServer_NoSessions_ReturnsFalse(t *testing.T) {
+	config := &Config{
+		Sessions: []SessionConfig{},
+	}
+	engine := NewEngine(config)
+
+	// No sessions, should not need hook server
+	assert.False(t, engine.needsHookServer())
+}

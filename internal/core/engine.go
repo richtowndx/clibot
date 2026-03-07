@@ -227,6 +227,17 @@ func (e *Engine) ensureSessionStarted(session *Session, sessionConfig SessionCon
 	return false, nil
 }
 
+// needsHookServer checks if any session requires hook server
+// Returns false if all sessions are ACP type (which use native protocol)
+func (e *Engine) needsHookServer() bool {
+	for _, sessionConfig := range e.config.Sessions {
+		if sessionConfig.CLIType != "acp" {
+			return true
+		}
+	}
+	return false
+}
+
 // Run starts the engine and begins processing messages
 func (e *Engine) Run(ctx context.Context) error {
 	logger.Info("starting-clibot-engine")
@@ -236,8 +247,12 @@ func (e *Engine) Run(ctx context.Context) error {
 		return fmt.Errorf("failed to initialize sessions: %w", err)
 	}
 
-	// Start HTTP hook server
-	go e.startHookServer()
+	// Start HTTP hook server only if needed
+	if e.needsHookServer() {
+		go e.startHookServer()
+	} else {
+		logger.Info("all-sessions-are-acp-type-hook-server-not-required")
+	}
 
 	// Start all enabled bots
 	for botType, botConfig := range e.config.Bots {
@@ -879,6 +894,18 @@ func (e *Engine) handleNewSession(args []string, msg bot.BotMessage) {
 	if !exists {
 		e.SendToBot(msg.Platform, msg.Channel,
 			fmt.Sprintf("❌ Invalid CLI type: '%s'\nSupported: claude, gemini, opencode", cliType))
+		return
+	}
+
+	// 4.5. Check if hook server is available for non-ACP sessions
+	if cliType != "acp" && e.hookServer == nil {
+		e.SendToBot(msg.Platform, msg.Channel,
+			fmt.Sprintf("❌ Cannot create '%s' session: HTTP hook server is not running\n\n"+
+				"Reason: All configured sessions are ACP type, so the HTTP hook server was not started.\n"+
+				"Non-ACP sessions (like '%s') require the hook server to receive CLI responses.\n\n"+
+				"Solutions:\n"+
+				"  1. Add at least one non-ACP session to your config file and restart\n"+
+				"  2. Or use 'acp' CLI type for this session", cliType, cliType))
 		return
 	}
 
