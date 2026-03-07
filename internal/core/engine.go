@@ -792,6 +792,7 @@ func (e *Engine) showHelp(msg bot.BotMessage) {
   sdel <name>  - Delete dynamic session (admin only)
 
 **Special Keywords** (exact match, case-insensitive):
+  ⚠️ These keywords only work in Hook mode with tmux input
   tab            - Send Tab key
   esc            - Send Escape key
   stab/s-tab     - Send Shift+Tab
