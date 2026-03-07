@@ -17,6 +17,7 @@ import (
 	"github.com/keepmind9/clibot/internal/bot"
 	"github.com/keepmind9/clibot/internal/cli"
 	"github.com/keepmind9/clibot/internal/logger"
+	"github.com/keepmind9/clibot/internal/proxy"
 	"github.com/keepmind9/clibot/internal/watchdog"
 	"github.com/keepmind9/clibot/pkg/constants"
 	"github.com/sirupsen/logrus"
@@ -98,6 +99,7 @@ type Engine struct {
 	userSessions    map[string]string         // User key (platform:userID) -> current session name
 	cmdLocksMu      sync.RWMutex              // Protects sessionCmdLocks map
 	sessionCmdLocks map[string]*sync.Mutex    // Per-session command locks (prevents concurrent commands on same session)
+	proxyMgr        *proxy.ProxyManager       // Proxy manager for HTTP clients
 	ctx             context.Context           // Context for cancellation
 	cancel          context.CancelFunc        // Cancel function for graceful shutdown
 }
@@ -127,6 +129,7 @@ func NewEngine(config *Config) *Engine {
 		sessionChannels: make(map[string]BotChannel),
 		userSessions:    make(map[string]string),
 		sessionCmdLocks: make(map[string]*sync.Mutex),
+		proxyMgr:        proxy.NewProxyManager(NewCoreConfigAdapter(config)),
 		ctx:             ctx,
 		cancel:          cancel,
 	}

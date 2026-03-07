@@ -7,23 +7,31 @@ import (
 	"sync"
 	"time"
 
-	"github.com/keepmind9/clibot/internal/core"
 	"golang.org/x/net/proxy"
 )
+
+// ProxyConfig represents a proxy configuration
+type ProxyConfig struct {
+	Enabled  bool
+	Type     string
+	URL      string
+	Username string
+	Password string
+}
 
 // ProxyManager manages HTTP clients with proxy support
 // It implements three-tier proxy priority: bot-level > global > environment variables
 type ProxyManager struct {
-	config  *core.Config
-	mu      sync.RWMutex
-	clients map[string]*http.Client
+	configProvider ConfigProvider
+	mu             sync.RWMutex
+	clients        map[string]*http.Client
 }
 
 // NewProxyManager creates a new ProxyManager instance
-func NewProxyManager(config *core.Config) *ProxyManager {
+func NewProxyManager(configProvider ConfigProvider) *ProxyManager {
 	return &ProxyManager{
-		config:  config,
-		clients: make(map[string]*http.Client),
+		configProvider: configProvider,
+		clients:        make(map[string]*http.Client),
 	}
 }
 
@@ -80,17 +88,27 @@ func (pm *ProxyManager) ClearCache() {
 // 1. Bot-level proxy (highest priority)
 // 2. Global proxy
 // 3. No proxy (use environment variables)
-func (pm *ProxyManager) resolveProxyConfig(botType string) (*core.ProxyConfig, error) {
+func (pm *ProxyManager) resolveProxyConfig(botType string) (*ProxyConfig, error) {
 	// 1. Bot-level proxy (highest priority)
-	if botConfig, exists := pm.config.Bots[botType]; exists {
-		if botConfig.Proxy != nil && botConfig.Proxy.Enabled {
-			return botConfig.Proxy, nil
-		}
+	if pm.configProvider.GetBotProxyEnabled(botType) {
+		return &ProxyConfig{
+			Enabled:  true,
+			Type:     pm.configProvider.GetBotProxyType(botType),
+			URL:      pm.configProvider.GetBotProxyURL(botType),
+			Username: pm.configProvider.GetBotProxyUsername(botType),
+			Password: pm.configProvider.GetBotProxyPassword(botType),
+		}, nil
 	}
 
 	// 2. Global proxy
-	if pm.config.Proxy.Enabled {
-		return &pm.config.Proxy, nil
+	if pm.configProvider.GetGlobalProxyEnabled() {
+		return &ProxyConfig{
+			Enabled:  true,
+			Type:     pm.configProvider.GetGlobalProxyType(),
+			URL:      pm.configProvider.GetGlobalProxyURL(),
+			Username: pm.configProvider.GetGlobalProxyUsername(),
+			Password: pm.configProvider.GetGlobalProxyPassword(),
+		}, nil
 	}
 
 	// 3. No proxy (use environment variables)
@@ -98,7 +116,7 @@ func (pm *ProxyManager) resolveProxyConfig(botType string) (*core.ProxyConfig, e
 }
 
 // createClient creates an HTTP client with the specified proxy configuration
-func (pm *ProxyManager) createClient(proxyConfig *core.ProxyConfig) (*http.Client, error) {
+func (pm *ProxyManager) createClient(proxyConfig *ProxyConfig) (*http.Client, error) {
 	if proxyConfig == nil {
 		// Use environment variables (HTTP_PROXY, HTTPS_PROXY, NO_PROXY)
 		return &http.Client{
@@ -132,7 +150,7 @@ func (pm *ProxyManager) createClient(proxyConfig *core.ProxyConfig) (*http.Clien
 }
 
 // createTransport creates an HTTP transport for the specified proxy type
-func (pm *ProxyManager) createTransport(cfg *core.ProxyConfig, proxyURL *url.URL) (*http.Transport, error) {
+func (pm *ProxyManager) createTransport(cfg *ProxyConfig, proxyURL *url.URL) (*http.Transport, error) {
 	var transport *http.Transport
 
 	switch cfg.Type {
