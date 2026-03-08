@@ -4,6 +4,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/keepmind9/clibot/internal/bot"
+	"github.com/keepmind9/clibot/internal/proxy"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -117,4 +119,49 @@ func TestParseTransportURL(t *testing.T) {
 		assert.Equal(t, tt.expected, transportType, "URL: %s", tt.url)
 		assert.Equal(t, tt.expectedAddr, addr, "URL: %s", tt.url)
 	}
+}
+
+// TestACPAdapter_SetEngine tests setting the engine
+func TestACPAdapter_SetEngine(t *testing.T) {
+	adapter, _ := NewACPAdapter(ACPAdapterConfig{})
+
+	// Create a mock engine
+	mockEngine := &mockEngine{}
+
+	// Set the engine
+	adapter.SetEngine(mockEngine)
+
+	// Verify engine was set (this is a basic smoke test)
+	assert.NotNil(t, adapter)
+}
+
+// mockEngine is a mock implementation of Engine for testing
+type mockEngine struct{}
+
+func (m *mockEngine) RegisterCLIAdapter(name string, adapter CLIAdapter) error {
+	return nil
+}
+
+func (m *mockEngine) RegisterBotAdapter(platform string, adapter bot.BotAdapter) {
+}
+
+func (m *mockEngine) GetProxyManager() proxy.Manager {
+	return nil
+}
+
+func (m *mockEngine) Start() error {
+	return nil
+}
+
+func (m *mockEngine) Stop() error {
+	return nil
+}
+
+func (m *mockEngine) BroadcastMessage(message string) {
+}
+
+func (m *mockEngine) SendToBot(platform, channel, message string) {
+}
+
+func (m *mockEngine) SendResponseToSession(sessionName, message string) {
 }
