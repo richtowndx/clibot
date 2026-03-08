@@ -85,14 +85,15 @@ bots:
     token: "your_token"
     proxy:
       enabled: true  # 覆盖全局代理
-      type: "socks5"
-      url: "socks5://127.0.0.1:1080"
+      url: "socks5://127.0.0.1:1080"  # 从 URL 自动识别代理类型
 
   discord:
     enabled: true
     token: "your_token"
     # 使用全局代理（无 bot 级别覆盖）
 ```
+
+**注意**：代理类型（HTTP/HTTPS/SOCKS5）会根据 URL scheme 自动识别，无需指定 `type` 字段。
 
 ## WebSocket 支持
 
@@ -172,15 +173,38 @@ clibot serve --config config.yaml
 
 | 平台 | 配置文件代理 | 环境变量 | 备注 |
 |------|------------|---------|------|
-| Telegram | ✅ 完全支持 | ✅ 支持 | 支持自定义 HTTP Client |
-| Discord | ✅ 完全支持 | ✅ 支持 | 支持自定义 HTTP Client |
-| 飞书 | ⚠️ 有限支持 | ✅ 推荐 | SDK 不支持自定义 Client，建议使用环境变量 |
-| 钉钉 | ⚠️ 有限支持 | ✅ 推荐 | SDK 不支持自定义 Client，建议使用环境变量 |
+| Telegram | ✅ 完全支持 | ✅ 支持 | HTTP API 和长轮询均支持配置代理 |
+| Discord | ⚠️ 部分支持 | ✅ **必须使用** | HTTP API（发送）支持配置，**WebSocket（接收）必须用环境变量** |
+| 飞书 | ⚠️ 有限支持 | ✅ **推荐** | SDK 不支持自定义 Client，建议使用环境变量 |
+| 钉钉 | ⚠️ 有限支持 | ✅ **推荐** | SDK 不支持自定义 Client，建议使用环境变量 |
 
-**飞书和钉钉：**
+### 平台详细说明
 
-由于它们的 SDK 不支持传入自定义 HTTP Client，配置文件的代理配置效果有限。为了可靠地使用代理，**建议使用环境变量**：
+#### Telegram ✅ 完全支持
+- **发送消息**：支持配置文件代理 ✅
+- **接收消息**：支持配置文件代理 ✅
+- **配置**：两种操作均支持自定义 HTTP Client
 
+#### Discord ⚠️ 部分支持
+- **发送消息（HTTP API）**：支持配置文件代理 ✅
+- **接收消息（WebSocket）**：**必须使用环境变量** ❌
+
+**原因？** Discord 的 WebSocket 连接使用 `gorilla/websocket` 库，该库需要具体的 `*websocket.Dialer` 类型。无法通过配置文件自定义。
+
+**Discord 推荐配置**：
+```bash
+# WebSocket 连接必须使用环境变量
+export HTTP_PROXY="http://172.30.64.9:10808"
+export HTTPS_PROXY="http://172.30.64.9:10808"
+clibot serve --config config.yaml
+```
+
+#### 飞书 & 钉钉 ⚠️ 有限支持
+- 官方 SDK 不支持自定义 HTTP Client
+- 配置文件的代理设置会被记录但**不会实际生效**
+- **必须使用环境变量**才能可靠地使用代理
+
+**飞书/钉钉推荐配置**：
 ```bash
 export HTTP_PROXY="http://127.0.0.1:7890"
 export HTTPS_PROXY="http://127.0.0.1:7890"

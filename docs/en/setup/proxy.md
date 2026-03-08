@@ -85,14 +85,15 @@ bots:
     token: "your_token"
     proxy:
       enabled: true  # Override global proxy
-      type: "socks5"
-      url: "socks5://127.0.0.1:1080"
+      url: "socks5://127.0.0.1:1080"  # Auto-detect proxy type from URL scheme
 
   discord:
     enabled: true
     token: "your_token"
     # Uses global proxy (no bot-level override)
 ```
+
+**Note**: Proxy type (HTTP/HTTPS/SOCKS5) is automatically detected from the URL scheme. No need to specify a `type` field.
 
 ## WebSocket Support
 
@@ -172,15 +173,38 @@ clibot serve --config config.yaml
 
 | Platform | Config File Proxy | Environment Variable | Notes |
 |----------|------------------|---------------------|-------|
-| Telegram | ✅ Full Support | ✅ Supported | Supports custom HTTP client |
-| Discord | ✅ Full Support | ✅ Supported | Supports custom HTTP client |
-| Feishu | ⚠️ Limited | ✅ Recommended | SDK doesn't support custom client, use env vars |
-| DingTalk | ⚠️ Limited | ✅ Recommended | SDK doesn't support custom client, use env vars |
+| Telegram | ✅ Full Support | ✅ Supported | Both HTTP API and long polling work with config proxy |
+| Discord | ⚠️ Partial | ✅ **Required** | HTTP API (sending) works with config, **WebSocket (receiving) requires env vars** |
+| Feishu | ⚠️ Limited | ✅ **Recommended** | SDK doesn't support custom client, use env vars |
+| DingTalk | ⚠️ Limited | ✅ **Recommended** | SDK doesn't support custom client, use env vars |
 
-**For Feishu and DingTalk:**
+### Platform-Specific Details
 
-Since their SDKs don't accept custom HTTP clients, proxy configuration via config file has limited effect. For reliable proxy support with Feishu/DingTalk, **use environment variables**:
+#### Telegram ✅ Full Support
+- **Sending messages**: Uses config file proxy ✅
+- **Receiving messages**: Uses config file proxy ✅
+- **Configuration**: Both operations support custom HTTP client
 
+#### Discord ⚠️ Partial Support
+- **Sending messages (HTTP API)**: Uses config file proxy ✅
+- **Receiving messages (WebSocket)**: **Requires environment variables** ❌
+
+**Why?** Discord's WebSocket connection uses `gorilla/websocket` library, which requires a concrete `*websocket.Dialer` type. This cannot be customized via configuration files.
+
+**Recommended setup for Discord**:
+```bash
+# Use environment variables for WebSocket connection
+export HTTP_PROXY="http://172.30.64.9:10808"
+export HTTPS_PROXY="http://172.30.64.9:10808"
+clibot serve --config config.yaml
+```
+
+#### Feishu & DingTalk ⚠️ Limited Support
+- Their official SDKs don't support custom HTTP clients
+- Config file proxy will be logged but **not actually used**
+- **Must use environment variables** for reliable proxy support
+
+**Recommended setup for Feishu/DingTalk**:
 ```bash
 export HTTP_PROXY="http://127.0.0.1:7890"
 export HTTPS_PROXY="http://127.0.0.1:7890"
