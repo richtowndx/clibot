@@ -48,3 +48,7 @@ docs/tmp
 
 # Bug analysis documentation (kept for reference but not committed)
 BUG_*.md
+
+# Git worktrees (local development branches)
+.worktrees/
+worktrees/
