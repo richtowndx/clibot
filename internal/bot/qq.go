@@ -178,6 +178,161 @@ func (q *QQBot) startHeartbeat(intervalMs int) {
 	}()
 }
 
+// Start establishes connection to QQ gateway and begins listening for messages
+func (q *QQBot) Start(messageHandler func(BotMessage)) error {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+
+	q.messageHandler = messageHandler
+	q.ctx, q.cancel = context.WithCancel(context.Background())
+
+	token, err := q.getAccessToken()
+	if err != nil {
+		return fmt.Errorf("get access token: %w", err)
+	}
+
+	gatewayURL, err := q.getGatewayURL(token)
+	if err != nil {
+		return fmt.Errorf("get gateway: %w", err)
+	}
+	q.gatewayURL = gatewayURL
+
+	if err := q.connectGateway(token); err != nil {
+		return fmt.Errorf("connect gateway: %w", err)
+	}
+
+	log.Printf("[QQ bot] Started")
+	return nil
+}
+
+// connectGateway establishes WebSocket connection to QQ gateway
+func (q *QQBot) connectGateway(token string) error {
+	dialer := websocket.DefaultDialer
+	ws, _, err := dialer.Dial(q.gatewayURL, nil)
+	if err != nil {
+		return fmt.Errorf("dial websocket: %w", err)
+	}
+
+	q.wsConn = ws
+	go q.handleWebSocketMessages(token)
+	return nil
+}
+
+// handleWebSocketMessages receives and processes WebSocket messages
+func (q *QQBot) handleWebSocketMessages(token string) {
+	for {
+		select {
+		case <-q.ctx.Done():
+			return
+		default:
+			q.mu.RLock()
+			ws := q.wsConn
+			q.mu.RUnlock()
+
+			if ws == nil {
+				return
+			}
+
+			_, message, err := ws.ReadMessage()
+			if err != nil {
+				log.Printf("[QQ bot] WebSocket read error: %v", err)
+				q.scheduleReconnect()
+				return
+			}
+
+			var payload GatewayPayload
+			if err := json.Unmarshal(message, &payload); err != nil {
+				log.Printf("[QQ bot] Failed to unmarshal payload: %v", err)
+				continue
+			}
+
+			q.handleGatewayPayload(payload, token)
+		}
+	}
+}
+
+// handleGatewayPayload processes gateway payloads based on OP code
+func (q *QQBot) handleGatewayPayload(payload GatewayPayload, token string) {
+	switch payload.OP {
+	case OPHello:
+		// Server sent hello with heartbeat interval
+		if helloData, ok := payload.D.(map[string]interface{}); ok {
+			if interval, ok := helloData["heartbeat_interval"].(float64); ok {
+				q.startHeartbeat(int(interval))
+			}
+		}
+
+		// Send identify
+		identify := GatewayPayload{
+			OP: OPIdentify,
+			D: IdentifyData{
+				Token:   fmt.Sprintf("QQBot %s", token),
+				Intents: IntentPublicMessages,
+				Shard:   []int{0, 1},
+			},
+		}
+		if err := q.sendGateway(identify); err != nil {
+			log.Printf("[QQ bot] Failed to send identify: %v", err)
+		}
+
+	case OPDispatch:
+		// Update sequence number
+		if payload.S != nil {
+			q.lastSequence = payload.S
+		}
+
+		// Handle event types
+		switch payload.T {
+		case "READY":
+			log.Printf("[QQ bot] Gateway READY")
+		case "C2C_MESSAGE_CREATE":
+			q.handleC2CMessage(payload.D)
+		}
+
+	case OPHeartbeatAck:
+		// Heartbeat acknowledged, nothing to do
+	case OPReconnect:
+		log.Printf("[QQ bot] Server requested reconnection")
+		q.scheduleReconnect()
+	}
+}
+
+// handleC2CMessage processes C2C (private chat) messages
+func (q *QQBot) handleC2CMessage(data interface{}) {
+	jsonData, err := json.Marshal(data)
+	if err != nil {
+		log.Printf("[QQ bot] Failed to marshal C2C message: %v", err)
+		return
+	}
+
+	var msg C2CMessageData
+	if err := json.Unmarshal(jsonData, &msg); err != nil {
+		log.Printf("[QQ bot] Failed to unmarshal C2C message: %v", err)
+		return
+	}
+
+	// Create bot message and call handler
+	botMsg := BotMessage{
+		Platform:  "qq",
+		UserID:    msg.Author.UserOpenID,
+		Channel:   msg.Author.UserOpenID,
+		Content:   msg.Content,
+		Timestamp: time.Now(),
+		MessageID: msg.ID,
+	}
+
+	if q.messageHandler != nil {
+		q.messageHandler(botMsg)
+	}
+}
+
+// scheduleReconnect schedules a reconnection attempt with exponential backoff
+func (q *QQBot) scheduleReconnect() {
+	// TODO: Implement exponential backoff reconnection
+	// For now, just log and stop
+	log.Printf("[QQ bot] Connection lost, manual restart required")
+}
+
 // Stop stops the QQ bot and cleans up resources
 func (q *QQBot) Stop() error {
 	q.mu.Lock()
