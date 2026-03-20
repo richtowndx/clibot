@@ -797,11 +797,11 @@ func (c *acpClient) SessionUpdate(ctx context.Context, params acp.SessionNotific
 	}
 
 	// Log session update (contains AI responses)
-	logger.WithFields(logrus.Fields{
-		"session_id":   params.SessionId,
-		"session_name": c.sessionName,
-		"update":       params.Update,
-	}).Debug("acp-session-update")
+	// logger.WithFields(logrus.Fields{
+	// 	"session_id":   params.SessionId,
+	// 	"session_name": c.sessionName,
+	// 	"update":       params.Update,
+	// }).Debug("acp-session-update")
 
 	// Save sessionId if this is the first update
 	c.adapter.mu.Lock()

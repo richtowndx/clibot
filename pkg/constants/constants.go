@@ -6,8 +6,13 @@ import "time"
 const (
 	// MaxDiscordMessageLength is Discord's message character limit
 	MaxDiscordMessageLength = 2000
-	// MaxTelegramMessageLength is Telegram's message character limit
+	// MaxTelegramMessageLength is Telegram's message character limit per message
+	// Telegram supports up to 4096 chars per message, but we send large messages in chunks
 	MaxTelegramMessageLength = 4096
+	// MaxTelegramFileSize is the maximum file size for Telegram file upload (20MB)
+	MaxTelegramFileSize = 20 * 1024 * 1024
+	// MaxTranscriptFileSize is the maximum transcript file size we support reading (20MB)
+	MaxTranscriptFileSize = 20 * 1024 * 1024
 	// MaxFeishuMessageLength is Feishu's message character limit
 	MaxFeishuMessageLength = 20000
 	// MaxDingTalkMessageLength is DingTalk's message character limit

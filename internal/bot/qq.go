@@ -32,6 +32,11 @@ type QQBot struct {
 	proxyMgr       proxy.Manager
 	msgSeqMap      map[string]int // Track message sequences for passive reply
 	lastSequence   *int
+	// Session state for resume
+	sessionID string
+	// Reconnection state
+	reconnectCount int
+	isReconnecting bool
 }
 
 // QQ Bot API endpoints
@@ -45,8 +50,8 @@ const (
 
 	// Timeouts
 	qqWebSocketHandshakeTimeout = 10 * time.Second // WebSocket handshake timeout
-	qqAPIRequestTimeout        = 10 * time.Second // Timeout for token and gateway requests
-	qqMessageSendTimeout       = 15 * time.Second // Timeout for sending messages
+	qqAPIRequestTimeout         = 10 * time.Second // Timeout for token and gateway requests
+	qqMessageSendTimeout        = 15 * time.Second // Timeout for sending messages
 
 	// Token management
 	qqTokenExpirationBuffer = 60 // Buffer in seconds before token expiration
@@ -59,6 +64,12 @@ const (
 
 	// Message splitting
 	qqSplitMinNewlineIndex = 2 // Minimum index for newline split (maxLen / 2)
+
+	// Reconnection
+	qqReconnectMaxAttempts     = 10  // Maximum reconnection attempts
+	qqReconnectInitialDelay    = 2   // Initial reconnection delay in seconds
+	qqReconnectMaxDelay        = 300 // Maximum reconnection delay in seconds
+	qqReconnectDelayMultiplier = 1.5 // Exponential backoff multiplier
 )
 
 // WebSocket OP codes (https://bots.qq.com/docs/gateway/gateway-events)
@@ -112,6 +123,25 @@ type IdentifyData struct {
 	Token   string `json:"token"`
 	Intents int    `json:"intents"`
 	Shard   []int  `json:"shard"`
+}
+
+// ResumeData contains resume payload for session restoration
+type ResumeData struct {
+	Token     string `json:"token"`
+	SessionID string `json:"session_id"`
+	Seq       int    `json:"seq"`
+}
+
+// ReadyData contains data from READY event
+type ReadyData struct {
+	Version   int    `json:"version"`
+	SessionID string `json:"session_id"`
+	User      struct {
+		ID       string `json:"id"`
+		Username string `json:"username"`
+		Bot      bool   `json:"bot"`
+	} `json:"user"`
+	Shard []int `json:"shard"`
 }
 
 // QQTokenResponse represents the token response from QQ API
@@ -219,11 +249,14 @@ func (q *QQBot) sendGateway(payload GatewayPayload) error {
 	return q.wsConn.WriteMessage(websocket.TextMessage, data)
 }
 
-// startHeartbeat starts the heartbeat loop
+// startHeartbeat starts the heartbeat loop with reconnection on failure
 func (q *QQBot) startHeartbeat(intervalMs int) {
 	ticker := time.NewTicker(time.Duration(intervalMs) * time.Millisecond)
 	go func() {
 		defer ticker.Stop()
+		consecutiveFailures := 0
+		maxFailures := 3 // Trigger reconnection after 3 consecutive heartbeat failures
+
 		for {
 			select {
 			case <-q.ctx.Done():
@@ -231,7 +264,16 @@ func (q *QQBot) startHeartbeat(intervalMs int) {
 			case <-ticker.C:
 				heartbeat := GatewayPayload{OP: OPHeartbeat, D: q.lastSequence}
 				if err := q.sendGateway(heartbeat); err != nil {
-					logger.Debugf("Heartbeat failed: %v", err)
+					consecutiveFailures++
+					logger.Warnf("[QQ] Heartbeat failed (%d/%d): %v", consecutiveFailures, maxFailures, err)
+
+					if consecutiveFailures >= maxFailures {
+						logger.Errorf("[QQ] Too many heartbeat failures, triggering reconnection")
+						q.scheduleReconnect()
+						return
+					}
+				} else {
+					consecutiveFailures = 0 // Reset on success
 				}
 			}
 		}
@@ -336,17 +378,34 @@ func (q *QQBot) handleGatewayPayload(payload GatewayPayload, token string) {
 			}
 		}
 
-		// Send identify
-		identify := GatewayPayload{
-			OP: OPIdentify,
-			D: IdentifyData{
-				Token:   fmt.Sprintf("QQBot %s", token),
-				Intents: IntentPublicMessages,
-				Shard:   []int{qqShardID, qqShardTotal},
-			},
-		}
-		if err := q.sendGateway(identify); err != nil {
-			logger.Errorf("[QQ] Identify failed: %v", err)
+		// Try Resume if we have a session, otherwise Identify
+		q.mu.RLock()
+		sessionID := q.sessionID
+		q.mu.RUnlock()
+
+		if sessionID != "" {
+			// Try to resume existing session
+			seq := 0
+			if q.lastSequence != nil {
+				seq = *q.lastSequence
+			}
+			resume := GatewayPayload{
+				OP: OPResume,
+				D: ResumeData{
+					Token:     fmt.Sprintf("QQBot %s", token),
+					SessionID: sessionID,
+					Seq:       seq,
+				},
+			}
+			if err := q.sendGateway(resume); err != nil {
+				logger.Errorf("[QQ] Resume failed, falling back to Identify: %v", err)
+				q.sendIdentify(token)
+			} else {
+				logger.Infof("[QQ] Sent Resume to restore session")
+			}
+		} else {
+			// New session
+			q.sendIdentify(token)
 		}
 
 	case OPDispatch:
@@ -358,17 +417,65 @@ func (q *QQBot) handleGatewayPayload(payload GatewayPayload, token string) {
 		// Handle event types
 		switch payload.T {
 		case "READY":
-			logger.Infof("[QQ] Gateway READY")
+			q.handleReady(payload.D)
+		case "RESUMED":
+			logger.Infof("[QQ] Session resumed successfully")
 		case "C2C_MESSAGE_CREATE":
 			q.handleC2CMessage(payload.D)
 		}
 
 	case OPHeartbeatAck:
 		// Heartbeat acknowledged, nothing to do
+		// logger.Debugf("[QQ] Heartbeat acknowledged")
+
 	case OPReconnect:
 		logger.Infof("[QQ] Server requested reconnection")
 		q.scheduleReconnect()
+
+	case OPInvalidSession:
+		logger.Warnf("[QQ] Invalid session, resetting and reconnecting")
+		q.mu.Lock()
+		q.sessionID = ""
+		q.lastSequence = nil
+		q.mu.Unlock()
+		q.scheduleReconnect()
 	}
+}
+
+// sendIdentify sends Identify payload to establish new session
+func (q *QQBot) sendIdentify(token string) {
+	identify := GatewayPayload{
+		OP: OPIdentify,
+		D: IdentifyData{
+			Token:   fmt.Sprintf("QQBot %s", token),
+			Intents: IntentPublicMessages,
+			Shard:   []int{qqShardID, qqShardTotal},
+		},
+	}
+	if err := q.sendGateway(identify); err != nil {
+		logger.Errorf("[QQ] Identify failed: %v", err)
+	}
+}
+
+// handleReady processes READY event and saves session state
+func (q *QQBot) handleReady(data interface{}) {
+	jsonData, err := json.Marshal(data)
+	if err != nil {
+		logger.Errorf("[QQ] Marshal READY data error: %v", err)
+		return
+	}
+
+	var readyData ReadyData
+	if err := json.Unmarshal(jsonData, &readyData); err != nil {
+		logger.Errorf("[QQ] Parse READY data error: %v", err)
+		return
+	}
+
+	q.mu.Lock()
+	q.sessionID = readyData.SessionID
+	q.mu.Unlock()
+
+	logger.Infof("[QQ] Gateway READY, session_id: %s", readyData.SessionID)
 }
 
 // handleC2CMessage processes C2C (private chat) messages
@@ -400,11 +507,120 @@ func (q *QQBot) handleC2CMessage(data interface{}) {
 	}
 }
 
-// scheduleReconnect schedules a reconnection attempt with exponential backoff
+// scheduleReconnect handles reconnection with exponential backoff
 func (q *QQBot) scheduleReconnect() {
-	// TODO: Implement exponential backoff reconnection
-	// For now, just log and stop
-	logger.Warn("Connection lost, manual restart required")
+	// Check if already reconnecting to avoid multiple concurrent reconnections
+	q.mu.Lock()
+	if q.isReconnecting {
+		q.mu.Unlock()
+		logger.Debugf("[QQ] Reconnection already in progress")
+		return
+	}
+	q.isReconnecting = true
+	q.mu.Unlock()
+
+	logger.Infof("[QQ] Starting reconnection process...")
+
+	// Close existing connection
+	q.mu.Lock()
+	if q.wsConn != nil {
+		q.wsConn.Close()
+		q.wsConn = nil
+	}
+	q.mu.Unlock()
+
+	go q.reconnectLoop()
+}
+
+// reconnectLoop implements exponential backoff reconnection
+func (q *QQBot) reconnectLoop() {
+	defer func() {
+		q.mu.Lock()
+		q.isReconnecting = false
+		q.mu.Unlock()
+	}()
+
+	delay := time.Duration(qqReconnectInitialDelay) * time.Second
+
+	for attempt := 1; attempt <= qqReconnectMaxAttempts; attempt++ {
+		// Check if context is cancelled
+		select {
+		case <-q.ctx.Done():
+			logger.Debugf("[QQ] Reconnection cancelled by context")
+			return
+		default:
+		}
+
+		logger.Infof("[QQ] Reconnection attempt %d/%d (waiting %v)...", attempt, qqReconnectMaxAttempts, delay)
+
+		time.Sleep(delay)
+
+		// Get fresh token if needed
+		token, err := q.getAccessToken()
+		if err != nil {
+			logger.Errorf("[QQ] Failed to get access token during reconnect: %v", err)
+			delay = time.Duration(float64(delay) * qqReconnectDelayMultiplier)
+			if delay > time.Duration(qqReconnectMaxDelay)*time.Second {
+				delay = time.Duration(qqReconnectMaxDelay) * time.Second
+			}
+			continue
+		}
+
+		// Get fresh gateway URL
+		gatewayURL, err := q.getGatewayURL(token)
+		if err != nil {
+			logger.Errorf("[QQ] Failed to get gateway URL during reconnect: %v", err)
+			delay = time.Duration(float64(delay) * qqReconnectDelayMultiplier)
+			if delay > time.Duration(qqReconnectMaxDelay)*time.Second {
+				delay = time.Duration(qqReconnectMaxDelay) * time.Second
+			}
+			continue
+		}
+
+		// Try to reconnect
+		if err := q.connectWithRetry(token, gatewayURL); err == nil {
+			logger.Infof("[QQ] Reconnection successful")
+			q.mu.Lock()
+			q.reconnectCount = 0
+			q.mu.Unlock()
+			return
+		}
+
+		// Exponential backoff
+		delay = time.Duration(float64(delay) * qqReconnectDelayMultiplier)
+		if delay > time.Duration(qqReconnectMaxDelay)*time.Second {
+			delay = time.Duration(qqReconnectMaxDelay) * time.Second
+		}
+	}
+
+	logger.Errorf("[QQ] Max reconnection attempts (%d) reached, giving up", qqReconnectMaxAttempts)
+}
+
+// connectWithRetry attempts to establish WebSocket connection using Resume or Identify
+func (q *QQBot) connectWithRetry(token, gatewayURL string) error {
+	logger.Infof("[QQ] Connecting to gateway: %s", gatewayURL)
+
+	dialer := &websocket.Dialer{
+		HandshakeTimeout: qqWebSocketHandshakeTimeout,
+	}
+
+	ws, _, err := dialer.Dial(gatewayURL, nil)
+	if err != nil {
+		return fmt.Errorf("dial websocket: %w", err)
+	}
+
+	logger.Infof("[QQ] WebSocket connected")
+	q.mu.Lock()
+	q.wsConn = ws
+	q.gatewayURL = gatewayURL
+	q.mu.Unlock()
+
+	// Start message handler
+	go q.handleWebSocketMessages(token)
+
+	// Wait a bit for Hello message
+	time.Sleep(500 * time.Millisecond)
+	return nil
 }
 
 // Stop stops the QQ bot and cleans up resources

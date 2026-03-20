@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/keepmind9/clibot/internal/logger"
+	"github.com/keepmind9/clibot/pkg/constants"
 	"github.com/sirupsen/logrus"
 )
 
@@ -179,8 +180,22 @@ func parseTranscript(filePath string) ([]TranscriptMessage, error) {
 	}
 	defer file.Close()
 
+	// Check file size to avoid reading excessively large files
+	fileInfo, err := file.Stat()
+	if err != nil {
+		return nil, fmt.Errorf("failed to stat transcript file: %w", err)
+	}
+	if fileInfo.Size() > constants.MaxTranscriptFileSize {
+		return nil, fmt.Errorf("transcript file too large: %d bytes (max %d bytes)",
+			fileInfo.Size(), constants.MaxTranscriptFileSize)
+	}
+
 	var messages []TranscriptMessage
+	// Use a larger buffer to handle long JSON lines (up to 10MB per line)
+	maxLineSize := 10 * 1024 * 1024 // 10MB
 	scanner := bufio.NewScanner(file)
+	buf := make([]byte, 0, maxLineSize)
+	scanner.Buffer(buf, maxLineSize)
 
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())

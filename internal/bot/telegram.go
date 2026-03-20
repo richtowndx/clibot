@@ -3,6 +3,10 @@ package bot
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
+	"regexp"
+	"strings"
 	"sync"
 	"time"
 
@@ -164,7 +168,12 @@ func (t *TelegramBot) handleMessage(message *tgbotapi.Message) {
 	}
 }
 
-// SendMessage sends a message to a Telegram chat
+// SendMessage sends a message to a Telegram chat.
+// Decision logic:
+// 1. If message length > 4096 bytes, send as file attachment
+// 2. If message length <= 4096 bytes:
+//   - Send as file if contains code blocks, tables, or Mermaid diagrams
+//   - Otherwise send as plain text message
 func (t *TelegramBot) SendMessage(chatID, message string) error {
 	t.mu.RLock()
 	bot := t.bot
@@ -178,38 +187,165 @@ func (t *TelegramBot) SendMessage(chatID, message string) error {
 		return fmt.Errorf("chat ID is required for Telegram")
 	}
 
-	// Telegram message limit
-	const maxTelegramLength = constants.MaxTelegramMessageLength
-	if len(message) > maxTelegramLength {
-		logger.WithFields(logrus.Fields{
-			"original_length": len(message),
-			"max_length":      maxTelegramLength,
-		}).Info("truncating-message-for-telegram-limit")
-		message = message[:maxTelegramLength]
-	}
-
 	// Parse chat ID (convert string to int64)
 	var chatIDInt int64
 	if _, err := fmt.Sscanf(chatID, "%d", &chatIDInt); err != nil {
 		return fmt.Errorf("invalid chat ID format: %w", err)
 	}
 
-	// Create message
-	msg := tgbotapi.NewMessage(chatIDInt, message)
-	msg.ParseMode = "Markdown" // Support markdown formatting
+	// Decide whether to send as file or text message
+	if shouldSendAsFile(message) {
+		return t.sendFile(chatID, chatIDInt, message)
+	}
 
-	// Send message
+	// Send as plain text message
+	return t.sendTextMessage(chatID, chatIDInt, message)
+}
+
+// sendFile sends a message as a markdown file attachment
+func (t *TelegramBot) sendFile(chatID string, chatIDInt int64, message string) error {
+	t.mu.RLock()
+	bot := t.bot
+	t.mu.RUnlock()
+
+	// Create a temporary markdown file
+	tmpDir := os.TempDir()
+	timestamp := time.Now().Format("20060102-150405")
+	fileName := fmt.Sprintf("clibot-response-%s.md", timestamp)
+	filePath := filepath.Join(tmpDir, fileName)
+
+	// Write message content to the markdown file
+	if err := os.WriteFile(filePath, []byte(message), 0644); err != nil {
+		logger.WithField("error", err).Error("failed-to-create-temp-markdown-file")
+		return fmt.Errorf("failed to create temp markdown file: %w", err)
+	}
+
+	// Ensure cleanup of temporary file
+	defer func() {
+		if removeErr := os.Remove(filePath); removeErr != nil {
+			logger.WithField("error", removeErr).Warn("failed-to-remove-temp-file")
+		}
+	}()
+
+	// Open file for reading
+	fileReader, err := os.Open(filePath)
+	if err != nil {
+		logger.WithField("error", err).Error("failed-to-open-temp-file")
+		return fmt.Errorf("failed to open temp file: %w", err)
+	}
+	defer fileReader.Close()
+
+	// Create file document for sending with FileReader to set custom filename
+	file := tgbotapi.NewDocument(chatIDInt, tgbotapi.FileReader{
+		Name:   fileName,
+		Reader: fileReader,
+	})
+	// Set caption to provide context
+	file.Caption = "📄 Response as markdown file"
+
+	// Send the document
+	_, err = bot.Send(file)
+	if err != nil {
+		logger.WithFields(logrus.Fields{
+			"chat_id":   chatID,
+			"file_path": filePath,
+			"error":     err,
+		}).Error("failed-to-send-markdown-file-to-telegram")
+		return fmt.Errorf("failed to send markdown file to chat %s: %w", chatID, err)
+	}
+
+	logger.WithFields(logrus.Fields{
+		"chat_id":      chatID,
+		"file_name":    fileName,
+		"content_size": len(message),
+	}).Info("markdown-file-sent-to-telegram")
+	return nil
+}
+
+// sendTextMessage sends a message as a plain text message (no Markdown parsing)
+func (t *TelegramBot) sendTextMessage(chatID string, chatIDInt int64, message string) error {
+	t.mu.RLock()
+	bot := t.bot
+	t.mu.RUnlock()
+
+	// Create text message without parse mode to avoid formatting errors
+	msg := tgbotapi.NewMessage(chatIDInt, message)
+
+	// Send the message
 	_, err := bot.Send(msg)
 	if err != nil {
 		logger.WithFields(logrus.Fields{
-			"chat_id": chatID,
-			"error":   err,
-		}).Error("failed-to-send-message-to-telegram")
-		return fmt.Errorf("failed to send message to chat %s: %w", chatID, err)
+			"chat_id":      chatID,
+			"content_size": len(message),
+			"error":        err,
+		}).Error("failed-to-send-text-message-to-telegram")
+		return fmt.Errorf("failed to send text message to chat %s: %w", chatID, err)
 	}
 
-	logger.WithField("chat_id", chatID).Info("message-sent-to-telegram")
+	logger.WithFields(logrus.Fields{
+		"chat_id":      chatID,
+		"content_size": len(message),
+	}).Info("text-message-sent-to-telegram")
 	return nil
+}
+
+// Telegram Bot constants
+const (
+	// telegramMaxMessageLength is the maximum message length for Telegram (4096 bytes)
+	telegramMaxMessageLength = 4096
+
+	// telegramParseMode is the parse mode for formatted text
+	telegramParseMode = "Markdown"
+)
+
+// Regular expressions for detecting special Markdown content
+var (
+	// Detects code blocks: ```language ... ```
+	regexCodeBlock = regexp.MustCompile("```[a-zA-Z]*\\n[\\s\\S]*?```")
+
+	// Detects Markdown tables: | ... | ... |
+	regexTable = regexp.MustCompile(`\\|[^\\n]+\\|`)
+
+	// Detects Mermaid diagrams: ```mermaid ... ```
+	regexMermaid = regexp.MustCompile("```mermaid\\n[\\s\\S]*?```")
+)
+
+// shouldSendAsFile determines if a message should be sent as a file attachment.
+// Priority:
+// 1. If message length > 4096 bytes, send as file (no content check needed)
+// 2. If message length <= 4096 bytes, check for special content:
+//   - Code blocks (```)
+//   - Markdown tables (|)
+//   - Mermaid diagrams (```mermaid)
+//
+// 3. If special content found, send as file; otherwise send as text
+func shouldSendAsFile(message string) bool {
+	// Priority 1: Check length first (4096 bytes limit for Telegram)
+	if len(message) > telegramMaxMessageLength {
+		logger.WithFields(logrus.Fields{
+			"length": len(message),
+			"limit":  telegramMaxMessageLength,
+		}).Debug("message-exceeds-length-limit-sending-as-file")
+		return true
+	}
+
+	// Priority 2: For shorter messages, check for special Markdown content
+	hasCodeBlock := regexCodeBlock.MatchString(message)
+	hasTable := regexTable.MatchString(message) && strings.Count(message, "|") >= 4
+	hasMermaid := regexMermaid.MatchString(message)
+
+	shouldSend := hasCodeBlock || hasTable || hasMermaid
+
+	if shouldSend {
+		logger.WithFields(logrus.Fields{
+			"length":         len(message),
+			"has_code_block": hasCodeBlock,
+			"has_table":      hasTable,
+			"has_mermaid":    hasMermaid,
+		}).Debug("message-contains-special-markdown-content-sending-as-file")
+	}
+
+	return shouldSend
 }
 
 // Stop closes the Telegram long polling connection and cleans up resources
