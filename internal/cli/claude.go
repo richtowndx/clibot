@@ -44,9 +44,10 @@ func NewClaudeAdapter(config ClaudeAdapterConfig) (*ClaudeAdapter, error) {
 func (c *ClaudeAdapter) HandleHookData(data []byte) (string, string, string, error) {
 	// Parse JSON
 	var hookData struct {
-		CWD            string `json:"cwd"`
-		TranscriptPath string `json:"transcript_path"`
-		EventName      string `json:"hook_event_name"`
+		CWD                  string `json:"cwd"`
+		TranscriptPath       string `json:"transcript_path"`
+		EventName            string `json:"hook_event_name"`
+		LastAssistantMessage string `json:"last_assistant_message"`
 	}
 	if err := json.Unmarshal(data, &hookData); err != nil {
 		logger.WithField("error", err).Error("failed-to-parse-hook-json-data")
@@ -75,12 +76,18 @@ func (c *ClaudeAdapter) HandleHookData(data []byte) (string, string, string, err
 				"error":      err,
 			}).Warn("failed-to-extract-interaction-from-transcript")
 		}
+	}
 
-		// Clear response for notification events as per original logic
-		if strings.EqualFold(hookData.EventName, "Notification") {
-			logger.Debug("clearing-response-for-notification-event")
-			response = ""
-		}
+	// Fallback: use last_assistant_message from hook data if transcript parsing failed
+	if response == "" && hookData.LastAssistantMessage != "" {
+		logger.Info("using-last-assistant-message-from-hook-data-as-fallback")
+		response = hookData.LastAssistantMessage
+	}
+
+	// Clear response for notification events as per original logic
+	if strings.EqualFold(hookData.EventName, "Notification") {
+		logger.Debug("clearing-response-for-notification-event")
+		response = ""
 	}
 
 	logger.WithFields(logrus.Fields{
